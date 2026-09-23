@@ -1,6 +1,7 @@
 package errorpkg
 
 import (
+	"context"
 	"strconv"
 
 	"github.com/segmentio/kafka-go"
@@ -16,10 +17,11 @@ type KafkaDLQWriter struct {
 func NewKafkaDLQWriter(brokers, topic string) *KafkaDLQWriter {
 	return &KafkaDLQWriter{
 		writer: &kafka.Writer{
-			Addr:         kafka.TCP(brokers),
-			Topic:        topic,
-			Balancer:     &kafka.LeastBytes{},
-			BatchTimeout: 10 * 1000 * 1000, // 10ms
+			Addr:                   kafka.TCP(brokers),
+			Topic:                  topic,
+			Balancer:               &kafka.LeastBytes{},
+			BatchTimeout:           10 * 1000 * 1000, // 10ms
+			AllowAutoTopicCreation: true,
 		},
 	}
 }
@@ -42,7 +44,7 @@ func (w *KafkaDLQWriter) Write(msgs []FailedMessage) error {
 			},
 		})
 	}
-	return w.writer.WriteMessages(nil, kMessages...)
+	return w.writer.WriteMessages(context.Background(), kMessages...)
 }
 
 // Close closes the underlying Kafka writer.

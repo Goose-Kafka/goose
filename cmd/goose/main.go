@@ -106,6 +106,15 @@ func main() {
 		)
 	}
 
+	// 8b. Create the DLQ writer (if enabled).
+	var dlqWriter worker.DLQWriter
+	if cfg.HTTP.DLQEnabled && cfg.HTTP.DLQType == "kafka" && cfg.HTTP.DLQKafkaBrokers != "" {
+		dw := errorpkg.NewKafkaDLQWriter(cfg.HTTP.DLQKafkaBrokers, cfg.HTTP.DLQKafkaTopic)
+		dlqWriter = dw
+		defer dw.Close()
+		log.Printf("DLQ writer enabled: topic=%s brokers=%s", cfg.HTTP.DLQKafkaTopic, cfg.HTTP.DLQKafkaBrokers)
+	}
+
 	// 9. Start N worker goroutines.
 	var wg sync.WaitGroup
 	m.WorkerPoolSize.Set(float64(cfg.HTTP.WorkerPoolSize))
@@ -119,7 +128,7 @@ func main() {
 			circuitBreaker,
 			doneChan,
 			cfg.HTTP.RetryMaxAttempts,
-			nil, // DLQ writer — wired in a later task
+			dlqWriter,
 		)
 		go w.Run(ctx, batchChan, &wg)
 	}

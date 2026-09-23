@@ -73,6 +73,12 @@ func (w *Worker) Run(ctx context.Context, batchChan <-chan *Batch, wg *sync.Wait
 
 // processBatch pushes a batch to the sink and handles any failures.
 func (w *Worker) processBatch(ctx context.Context, batch *Batch) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[worker %d] recovered from panic processing batch %s: %v", w.id, batch.ID, r)
+		}
+	}()
+
 	// Check circuit breaker before making outbound calls.
 	if w.circuitBreaker != nil {
 		for !w.circuitBreaker.Allow() {
