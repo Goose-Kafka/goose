@@ -1,0 +1,7 @@
+goose
+/bin/
+*.test
+coverage.out
+.DS_Store
+.idea/
+.vscode/
