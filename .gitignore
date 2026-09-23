@@ -1,5 +1,4 @@
-goose
-/bin/
+/bin/goose
 *.test
 coverage.out
 .DS_Store
