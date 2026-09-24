@@ -7,7 +7,8 @@
 
 ## Task 1: Proto→JSON Conversion for HTTP Sink
 
-**Status:** 🔲 Not started
+**Status:** ✅ Complete
+**Completed:** 2024-09-24
 **Priority:** High — most common use case
 **Effort:** Medium
 
@@ -67,7 +68,8 @@ SCHEMA_REGISTRY_PROTO_CLASS=events.OrderEvent
 
 ## Task 2: Schema Registry Long-Polling Refresh
 
-**Status:** 🔲 Not started
+**Status:** ✅ Complete
+**Completed:** 2024-09-24
 **Priority:** High — required for production proto support
 **Effort:** Medium
 
@@ -479,8 +481,8 @@ OAuth2 config exists but the token is likely fetched once and not refreshed. OAu
 
 | # | Task | Priority | Effort | Depends On |
 |---|---|---|---|---|
-| 1 | Proto→JSON conversion | High | Medium | — |
-| 2 | Schema registry long-polling | High | Medium | Task 1 |
+| 1 | Proto→JSON conversion | High | Medium | ✅ Done |
+| 2 | Schema registry long-polling | High | Medium | ✅ Done |
 | 6 | Batch-poll consumer | Medium | Medium | — |
 | 3 | gRPC sink | Medium | Medium-High | — |
 | 8 | HPA in Helm chart | Medium | Low | — |

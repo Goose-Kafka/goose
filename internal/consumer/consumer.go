@@ -2,6 +2,7 @@ package consumer
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strconv"
 	"strings"
@@ -50,14 +51,19 @@ func New(cfg *config.Config, batchChan chan<- *worker.Batch, doneChan <-chan str
 		MaxBytes: 10e6,
 	})
 
-	schemaMgr := schema.NewSchemaManager(schema.Config{
+	schemaMgr, err := schema.NewSchemaManager(schema.Config{
 		InputSchemaDataType:      cfg.Schema.InputSchemaDataType,
 		SchemaRegistryEnabled:    cfg.Schema.SchemaRegistryEnabled,
 		SchemaRegistryURL:        cfg.Schema.SchemaRegistryURL,
 		SchemaRegistryProtoClass: cfg.Schema.SchemaRegistryProtoClass,
+		RefreshStrategy:          cfg.Schema.RefreshStrategy,
+		RefreshIntervalMs:        cfg.Schema.RefreshIntervalMs,
 		FetchTimeoutMs:           cfg.Schema.FetchTimeoutMs,
 		AuthBearerToken:          cfg.Schema.AuthBearerToken,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("schema manager: %w", err)
+	}
 
 	var f filter.Filter
 	if cfg.HTTP.FilterEnabled && cfg.HTTP.FilterJSONPath != "" {
@@ -88,6 +94,7 @@ func New(cfg *config.Config, batchChan chan<- *worker.Batch, doneChan <-chan str
 // pool. The loop exits when the context is cancelled.
 func (c *Consumer) Run(ctx context.Context) error {
 	defer c.reader.Close()
+	defer c.schemaMgr.Close()
 
 	for {
 		select {
