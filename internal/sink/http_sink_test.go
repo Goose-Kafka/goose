@@ -20,9 +20,9 @@ func TestHttpSinkBatchMode(t *testing.T) {
 	defer server.Close()
 
 	sink := NewHTTPSink(HTTPSinkConfig{
-		ServiceURL:    server.URL,
-		RequestMethod: http.MethodPost,
-		Timeout:       5000,
+		ServiceURL:     server.URL,
+		RequestMethod:  http.MethodPost,
+		Timeout:        5000,
 		MaxConnections: 10,
 	})
 
@@ -91,9 +91,9 @@ func TestHttpSink5xxReturnsFailed(t *testing.T) {
 	defer server.Close()
 
 	sink := NewHTTPSink(HTTPSinkConfig{
-		ServiceURL:    server.URL,
-		RequestMethod: http.MethodPost,
-		Timeout:       5000,
+		ServiceURL:     server.URL,
+		RequestMethod:  http.MethodPost,
+		Timeout:        5000,
 		MaxConnections: 10,
 	})
 
@@ -122,9 +122,9 @@ func TestHttpSink4xxReturnsFailed(t *testing.T) {
 	defer server.Close()
 
 	sink := NewHTTPSink(HTTPSinkConfig{
-		ServiceURL:    server.URL,
-		RequestMethod: http.MethodPost,
-		Timeout:       5000,
+		ServiceURL:     server.URL,
+		RequestMethod:  http.MethodPost,
+		Timeout:        5000,
 		MaxConnections: 10,
 	})
 
@@ -153,11 +153,11 @@ func TestHttpSinkConnectionTTL(t *testing.T) {
 	defer server.Close()
 
 	sink := NewHTTPSink(HTTPSinkConfig{
-		ServiceURL:       server.URL,
-		RequestMethod:    http.MethodPost,
-		Timeout:          5000,
-		MaxConnections:   10,
-		ConnectionTTL:    100,
+		ServiceURL:     server.URL,
+		RequestMethod:  http.MethodPost,
+		Timeout:        5000,
+		MaxConnections: 10,
+		ConnectionTTL:  100,
 	})
 
 	msgs1 := []Message{
@@ -189,9 +189,9 @@ func TestHttpSinkHeaders(t *testing.T) {
 	defer server.Close()
 
 	sink := NewHTTPSink(HTTPSinkConfig{
-		ServiceURL:    server.URL,
-		RequestMethod: http.MethodPost,
-		Timeout:       5000,
+		ServiceURL:     server.URL,
+		RequestMethod:  http.MethodPost,
+		Timeout:        5000,
 		MaxConnections: 10,
 		Headers:        "Authorization:token123",
 	})

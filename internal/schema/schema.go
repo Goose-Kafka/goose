@@ -10,13 +10,13 @@ import (
 
 // Config holds schema-related configuration for the firehose.
 type Config struct {
-	InputSchemaDataType    string // "json" or "protobuf"
-	SchemaRegistryEnabled  bool
-	SchemaRegistryURL      string
+	InputSchemaDataType      string // "json" or "protobuf"
+	SchemaRegistryEnabled    bool
+	SchemaRegistryURL        string
 	SchemaRegistryProtoClass string
-	RefreshStrategy        string
-	FetchTimeoutMs         int
-	AuthBearerToken        string
+	RefreshStrategy          string
+	FetchTimeoutMs           int
+	AuthBearerToken          string
 }
 
 // SchemaManager deserializes raw Kafka message bytes into the format
@@ -31,10 +31,10 @@ func NewSchemaManager(cfg Config) SchemaManager {
 	switch cfg.InputSchemaDataType {
 	case "protobuf":
 		return NewProtobufSchemaManager(ProtobufConfig{
-			Enabled:        cfg.SchemaRegistryEnabled,
-			URL:            cfg.SchemaRegistryURL,
-			ProtoClass:     cfg.SchemaRegistryProtoClass,
-			FetchTimeoutMs: cfg.FetchTimeoutMs,
+			Enabled:         cfg.SchemaRegistryEnabled,
+			URL:             cfg.SchemaRegistryURL,
+			ProtoClass:      cfg.SchemaRegistryProtoClass,
+			FetchTimeoutMs:  cfg.FetchTimeoutMs,
 			AuthBearerToken: cfg.AuthBearerToken,
 		})
 	default:

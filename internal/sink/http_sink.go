@@ -76,6 +76,7 @@ func (s *HTTPSink) Push(msgs []Message) ([]errorpkg.FailedMessage, error) {
 // pushBatch joins all message values into a JSON array and sends one POST.
 // On 2xx → no failures. On error → all messages are reported as failed.
 func (s *HTTPSink) pushBatch(msgs []Message) ([]errorpkg.FailedMessage, error) {
+	s.connTrack.evictStale()
 	body := buildBatchBody(msgs)
 	req, err := http.NewRequest(s.config.RequestMethod, s.config.ServiceURL, bytes.NewReader(body))
 	if err != nil {

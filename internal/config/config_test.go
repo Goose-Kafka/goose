@@ -9,12 +9,13 @@ func TestLoadConfigDefaults(t *testing.T) {
 	// passes. Brokers has a default, so clear it to exercise the default path.
 	t.Setenv("SOURCE_KAFKA_TOPIC", "default-test-topic")
 	t.Setenv("SINK_HTTP_SERVICE_URL", "http://default:8080/api")
+	t.Setenv("SOURCE_KAFKA_CONSUMER_GROUP_ID", "default-test-group")
+	t.Setenv("SINK_HTTP_DLQ_KAFKA_BROKERS", "localhost:9092")
 
 	// Clear optional fields so defaults are exercised.
 	for _, key := range []string{
 		"SOURCE_KAFKA_BROKERS",
-		"SOURCE_KAFKA_CONSUMER_GROUP_ID",
-		"SOURCE_KAFKA_MAX_POLL_RECORDS",
+		"SOURCE_KAFKA_CONSUMER_CONFIG_MAX_POLL_RECORDS",
 		"SOURCE_KAFKA_POLL_TIMEOUT_MS",
 		"SOURCE_KAFKA_MAX_POLL_INTERVAL_MS",
 		"SOURCE_KAFKA_SESSION_TIMEOUT_MS",
@@ -117,6 +118,7 @@ func TestLoadConfigFromEnv(t *testing.T) {
 	t.Setenv("SINK_HTTP_SERVICE_URL", "http://test:8080/api")
 	t.Setenv("SINK_WORKER_POOL_SIZE", "20")
 	t.Setenv("SINK_HTTP_REQUEST_METHOD", "PUT")
+	t.Setenv("SINK_HTTP_DLQ_KAFKA_BROKERS", "broker1:9092,broker2:9092")
 
 	cfg, err := Load()
 	if err != nil {
@@ -147,10 +149,64 @@ func TestLoadConfigValidationMissingRequired(t *testing.T) {
 	t.Setenv("SOURCE_KAFKA_BROKERS", "")
 	t.Setenv("SOURCE_KAFKA_TOPIC", "")
 	t.Setenv("SINK_HTTP_SERVICE_URL", "")
+	t.Setenv("SOURCE_KAFKA_CONSUMER_GROUP_ID", "")
 
 	_, err := Load()
 	if err == nil {
 		t.Fatalf("Load() returned nil error, want error for missing required fields")
+	}
+}
+
+func TestLoadConfigValidationGroupIDRequired(t *testing.T) {
+	t.Setenv("SOURCE_KAFKA_BROKERS", "localhost:9092")
+	t.Setenv("SOURCE_KAFKA_TOPIC", "test")
+	t.Setenv("SINK_HTTP_SERVICE_URL", "http://test:8080/api")
+	t.Setenv("SOURCE_KAFKA_CONSUMER_GROUP_ID", "")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatalf("Load() returned nil error, want error for missing consumer group ID")
+	}
+}
+
+func TestLoadConfigValidationWorkerPoolSizeRequired(t *testing.T) {
+	t.Setenv("SOURCE_KAFKA_BROKERS", "localhost:9092")
+	t.Setenv("SOURCE_KAFKA_TOPIC", "test")
+	t.Setenv("SINK_HTTP_SERVICE_URL", "http://test:8080/api")
+	t.Setenv("SOURCE_KAFKA_CONSUMER_GROUP_ID", "test-group")
+	t.Setenv("SINK_WORKER_POOL_SIZE", "0")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatalf("Load() returned nil error, want error for WorkerPoolSize <= 0")
+	}
+}
+
+func TestLoadConfigValidationMaxConnectionsRequired(t *testing.T) {
+	t.Setenv("SOURCE_KAFKA_BROKERS", "localhost:9092")
+	t.Setenv("SOURCE_KAFKA_TOPIC", "test")
+	t.Setenv("SINK_HTTP_SERVICE_URL", "http://test:8080/api")
+	t.Setenv("SOURCE_KAFKA_CONSUMER_GROUP_ID", "test-group")
+	t.Setenv("SINK_HTTP_MAX_CONNECTIONS", "0")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatalf("Load() returned nil error, want error for MaxConnections <= 0")
+	}
+}
+
+func TestLoadConfigValidationDLQBrokersRequired(t *testing.T) {
+	t.Setenv("SOURCE_KAFKA_BROKERS", "localhost:9092")
+	t.Setenv("SOURCE_KAFKA_TOPIC", "test")
+	t.Setenv("SINK_HTTP_SERVICE_URL", "http://test:8080/api")
+	t.Setenv("SOURCE_KAFKA_CONSUMER_GROUP_ID", "test-group")
+	t.Setenv("SINK_HTTP_DLQ_ENABLED", "true")
+	t.Setenv("SINK_HTTP_DLQ_TYPE", "kafka")
+	t.Setenv("SINK_HTTP_DLQ_KAFKA_BROKERS", "")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatalf("Load() returned nil error, want error for missing DLQ Kafka brokers")
 	}
 }
 

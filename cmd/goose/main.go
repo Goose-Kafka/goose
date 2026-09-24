@@ -7,19 +7,21 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/arelligoutham/goose/internal/config"
+	"github.com/arelligoutham/goose/internal/consumer"
 	errorpkg "github.com/arelligoutham/goose/internal/error"
 	"github.com/arelligoutham/goose/internal/metrics"
 	"github.com/arelligoutham/goose/internal/offset/offsetmanager"
-	"github.com/arelligoutham/goose/internal/consumer"
 	"github.com/arelligoutham/goose/internal/sink"
 	"github.com/arelligoutham/goose/internal/tracing"
 	"github.com/arelligoutham/goose/internal/worker"
+	"github.com/segmentio/kafka-go"
 )
 
 func main() {
@@ -129,6 +131,7 @@ func main() {
 			doneChan,
 			cfg.HTTP.RetryMaxAttempts,
 			dlqWriter,
+			m,
 		)
 		go w.Run(ctx, batchChan, &wg)
 	}
@@ -141,7 +144,7 @@ func main() {
 	}
 
 	// 11. Start the offset commit loop goroutine.
-	go commitLoop(ctx, offsetMgr, time.Duration(cfg.Kafka.CommitIntervalMs)*time.Millisecond, doneChan)
+	go commitLoop(ctx, offsetMgr, c.Reader(), time.Duration(cfg.Kafka.CommitIntervalMs)*time.Millisecond, doneChan, batchChan, circuitBreaker, m)
 
 	// 12. Start the consumer goroutine.
 	go func() {
@@ -165,10 +168,11 @@ func main() {
 }
 
 // commitLoop periodically retrieves committable offsets from the offset
-// manager and logs them. When a doneChan message arrives, it marks the
-// corresponding batch's offsets as committable. Actual Kafka offset commits
-// will be wired in a subsequent task.
-func commitLoop(ctx context.Context, offsetMgr *offsetmanager.OffsetManager, interval time.Duration, doneChan <-chan string) {
+// manager, commits them to Kafka, and prunes the committed entries. When a
+// doneChan message arrives, it marks the corresponding batch's offsets as
+// committable. It also sets gauges for worker-pool queue depth and circuit
+// breaker state on each tick.
+func commitLoop(ctx context.Context, offsetMgr *offsetmanager.OffsetManager, reader *kafka.Reader, interval time.Duration, doneChan <-chan string, batchChan <-chan *worker.Batch, cb *errorpkg.CircuitBreaker, m *metrics.Metrics) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -179,10 +183,47 @@ func commitLoop(ctx context.Context, offsetMgr *offsetmanager.OffsetManager, int
 		case batchID := <-doneChan:
 			offsetMgr.SetCommittable(batchID)
 		case <-ticker.C:
+			// Update gauges on each tick.
+			if m != nil {
+				m.WorkerPoolQueueDepth.Set(float64(len(batchChan)))
+				if cb != nil {
+					if cb.IsOpen() {
+						m.CircuitBreakerOpen.WithLabelValues("http").Set(1)
+					} else {
+						m.CircuitBreakerOpen.WithLabelValues("http").Set(0)
+					}
+				}
+			}
+
 			committable := offsetMgr.GetCommittable()
+			if len(committable) == 0 {
+				continue
+			}
+
+			// Build kafka messages for CommitMessages — one per partition,
+			// carrying the next-offset (highest committable + 1).
+			msgs := make([]kafka.Message, 0, len(committable))
+			for tp, offset := range committable {
+				msgs = append(msgs, kafka.Message{
+					Topic:     tp.Topic,
+					Partition: tp.Partition,
+					Offset:    offset,
+				})
+			}
+
+			if err := reader.CommitMessages(ctx, msgs...); err != nil {
+				log.Printf("offset commit error: %v", err)
+				continue
+			}
+
 			for tp, offset := range committable {
 				log.Printf("offset commit: topic=%s partition=%d offset=%d", tp.Topic, tp.Partition, offset)
+				if m != nil {
+					m.OffsetCommits.WithLabelValues(tp.Topic, strconv.Itoa(tp.Partition)).Inc()
+				}
 			}
+
+			offsetMgr.PruneCommitted(committable)
 		}
 	}
 }

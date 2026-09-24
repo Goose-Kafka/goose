@@ -36,7 +36,7 @@ func TestWorkerProcessesBatchSuccessfully(t *testing.T) {
 	circuitBreaker := errorpkg.NewCircuitBreaker(80, 100, 10*time.Second)
 	doneChan := make(chan string)
 
-	w := NewWorker(0, s, errorHandler, backoff, circuitBreaker, doneChan, 3, nil)
+	w := NewWorker(0, s, errorHandler, backoff, circuitBreaker, doneChan, 3, nil, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -94,7 +94,7 @@ func TestWorkerHandles5xxWithRetry(t *testing.T) {
 	circuitBreaker := errorpkg.NewCircuitBreaker(80, 100, 10*time.Second)
 	doneChan := make(chan string)
 
-	w := NewWorker(0, s, errorHandler, backoff, circuitBreaker, doneChan, 3, nil)
+	w := NewWorker(0, s, errorHandler, backoff, circuitBreaker, doneChan, 3, nil, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

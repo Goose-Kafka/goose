@@ -151,3 +151,21 @@ func insertSorted(nodes []offsetNode, node offsetNode) []offsetNode {
 	nodes[lo] = node
 	return nodes
 }
+
+// PruneCommitted removes all offset nodes with offset < the given value from
+// sortedOffsets. This is called after a successful Kafka commit to prevent
+// the slice from growing unbounded. The limit value for each partition is
+// the next-offset (highest committable + 1) produced by GetCommittable, so
+// every node strictly below it has been committed and can be safely discarded.
+func (om *OffsetManager) PruneCommitted(upTo map[TopicPartition]int64) {
+	om.mu.Lock()
+	defer om.mu.Unlock()
+	for tp, limit := range upTo {
+		nodes := om.sortedOffsets[tp]
+		pruned := 0
+		for pruned < len(nodes) && nodes[pruned].offset < limit {
+			pruned++
+		}
+		om.sortedOffsets[tp] = nodes[pruned:]
+	}
+}

@@ -33,6 +33,12 @@ type Consumer struct {
 	metrics   *metrics.Metrics
 }
 
+// Reader returns the underlying kafka-go reader so that external callers
+// (e.g. the commit loop) can commit offsets via the consumer group protocol.
+func (c *Consumer) Reader() *kafka.Reader {
+	return c.reader
+}
+
 // New creates a Consumer with a kafka-go reader, schema manager, and filter
 // based on the provided config. The reader is created but not connected —
 // Kafka is contacted only when Run is called.
@@ -55,7 +61,12 @@ func New(cfg *config.Config, batchChan chan<- *worker.Batch, doneChan <-chan str
 
 	var f filter.Filter
 	if cfg.HTTP.FilterEnabled && cfg.HTTP.FilterJSONPath != "" {
-		f, _ = filter.NewJSONPathFilter(filter.FilterConfig{Expression: cfg.HTTP.FilterJSONPath})
+		var ferr error
+		f, ferr = filter.NewJSONPathFilter(filter.FilterConfig{Expression: cfg.HTTP.FilterJSONPath})
+		if ferr != nil {
+			log.Printf("consumer: invalid filter expression %q: %v, falling back to NoOp filter", cfg.HTTP.FilterJSONPath, ferr)
+			f = filter.NewNoOpFilter()
+		}
 	} else {
 		f = filter.NewNoOpFilter()
 	}
@@ -96,6 +107,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 
 		parsed, err := c.schemaMgr.Parse(msg.Value)
 		if err != nil {
+			log.Printf("consumer: schema parse error for topic=%s partition=%d offset=%d: %v", msg.Topic, msg.Partition, msg.Offset, err)
 			continue
 		}
 
@@ -117,8 +129,13 @@ func (c *Consumer) Run(ctx context.Context) error {
 
 		passed, dropped := c.filter.Apply([]filter.Message{filterMsg})
 
-		if len(dropped) > 0 && c.offsetMgr != nil {
-			c.offsetMgr.AddOffsetsAndSetCommittable(toOffsetMessages(dropped))
+		if len(dropped) > 0 {
+			if c.offsetMgr != nil {
+				c.offsetMgr.AddOffsetsAndSetCommittable(toOffsetMessages(dropped))
+			}
+			if c.metrics != nil {
+				c.metrics.MessagesFiltered.WithLabelValues(msg.Topic).Add(float64(len(dropped)))
+			}
 		}
 
 		if len(passed) == 0 {
@@ -136,6 +153,9 @@ func (c *Consumer) Run(ctx context.Context) error {
 
 		if c.metrics != nil {
 			c.metrics.MessagesConsumed.WithLabelValues(msg.Topic, strconv.Itoa(msg.Partition)).Inc()
+			// TODO: set firehose_consumer_lag_messages gauge.
+			// Requires reader.Stats().Lag or reader.Lag(ctx, partition) call.
+			// See kafka-go ReaderStats for partition lag data.
 		}
 
 		select {

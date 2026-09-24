@@ -9,63 +9,63 @@ import (
 // Config is the top-level configuration for the goose firehose, assembled from
 // environment variables.
 type Config struct {
-	Kafka    KafkaConfig
-	HTTP     HTTPConfig
-	Schema   SchemaConfig
-	Metrics  MetricsConfig
-	Tracing  TracingConfig
+	Kafka   KafkaConfig
+	HTTP    HTTPConfig
+	Schema  SchemaConfig
+	Metrics MetricsConfig
+	Tracing TracingConfig
 }
 
 // KafkaConfig holds source Kafka consumer settings.
 type KafkaConfig struct {
-	Brokers            string
-	Topic              string
-	ConsumerGroupID    string
-	MaxPollRecords     int
-	PollTimeoutMs      int
-	MaxPollIntervalMs  int
-	SessionTimeoutMs   int
-	AutoOffsetReset    string
-	CommitIntervalMs   int
+	Brokers           string
+	Topic             string
+	ConsumerGroupID   string
+	MaxPollRecords    int
+	PollTimeoutMs     int
+	MaxPollIntervalMs int
+	SessionTimeoutMs  int
+	AutoOffsetReset   string
+	CommitIntervalMs  int
 }
 
 // HTTPConfig holds sink HTTP client settings including retry, circuit breaker,
 // DLQ, and OAuth2 configuration.
 type HTTPConfig struct {
-	ServiceURL                       string
-	RequestMethod                    string
-	RequestTimeoutMs                 int
-	MaxConnections                   int
-	ConnectionTtlMs                  int
-	ConnectionIdleEvictMs            int
-	ConnectionValidateInactivityMs   int
-	Headers                          map[string]string
-	DataFormat                       string
-	JSONBodyTemplate                 string
-	WorkerPoolSize                   int
-	WorkerPoolBuffer                 int
-	ErrorRetryStatusCodes            StatusRangeList
-	ErrorDLQStatusCodes              StatusRangeList
-	ErrorFailStatusCodes             StatusRangeList
-	RetryMaxAttempts                 int
-	RetryBackoffInitialMs            int
-	RetryBackoffMaxMs                int
-	RetryBackoffMultiplier            float64
-	CircuitBreakerEnabled            bool
-	CircuitBreakerFailureThreshold   int
-	CircuitBreakerWindowSize         int
-	CircuitBreakerResetTimeoutMs     int
-	DLQEnabled                       bool
-	DLQType                          string
-	DLQKafkaTopic                    string
-	DLQKafkaBrokers                  string
-	OAuth2Enabled                    bool
-	OAuth2AccessTokenURL             string
-	OAuth2ClientName                 string
-	OAuth2ClientSecret               string
-	OAuth2Scope                      string
-	FilterEnabled                    bool
-	FilterJSONPath                   string
+	ServiceURL                     string
+	RequestMethod                  string
+	RequestTimeoutMs               int
+	MaxConnections                 int
+	ConnectionTtlMs                int
+	ConnectionIdleEvictMs          int
+	ConnectionValidateInactivityMs int
+	Headers                        map[string]string
+	DataFormat                     string
+	JSONBodyTemplate               string
+	WorkerPoolSize                 int
+	WorkerPoolBuffer               int
+	ErrorRetryStatusCodes          StatusRangeList
+	ErrorDLQStatusCodes            StatusRangeList
+	ErrorFailStatusCodes           StatusRangeList
+	RetryMaxAttempts               int
+	RetryBackoffInitialMs          int
+	RetryBackoffMaxMs              int
+	RetryBackoffMultiplier         float64
+	CircuitBreakerEnabled          bool
+	CircuitBreakerFailureThreshold int
+	CircuitBreakerWindowSize       int
+	CircuitBreakerResetTimeoutMs   int
+	DLQEnabled                     bool
+	DLQType                        string
+	DLQKafkaTopic                  string
+	DLQKafkaBrokers                string
+	OAuth2Enabled                  bool
+	OAuth2AccessTokenURL           string
+	OAuth2ClientName               string
+	OAuth2ClientSecret             string
+	OAuth2Scope                    string
+	FilterEnabled                  bool
+	FilterJSONPath                 string
 }
 
 // SchemaConfig holds schema registry and input data type settings.
@@ -88,9 +88,9 @@ type MetricsConfig struct {
 
 // TracingConfig holds OpenTelemetry tracing settings.
 type TracingConfig struct {
-	Enabled     bool
+	Enabled      bool
 	OTLPEndpoint string
-	ServiceName string
+	ServiceName  string
 }
 
 // StatusRange represents an inclusive range of HTTP status codes.
@@ -158,7 +158,7 @@ func Load() (*Config, error) {
 			Brokers:           getEnv("SOURCE_KAFKA_BROKERS", "localhost:9092"),
 			Topic:             getEnv("SOURCE_KAFKA_TOPIC", ""),
 			ConsumerGroupID:   getEnv("SOURCE_KAFKA_CONSUMER_GROUP_ID", ""),
-			MaxPollRecords:    getEnvInt("SOURCE_KAFKA_MAX_POLL_RECORDS", 100),
+			MaxPollRecords:    getEnvInt("SOURCE_KAFKA_CONSUMER_CONFIG_MAX_POLL_RECORDS", 100),
 			PollTimeoutMs:     getEnvInt("SOURCE_KAFKA_POLL_TIMEOUT_MS", 1000),
 			MaxPollIntervalMs: getEnvInt("SOURCE_KAFKA_MAX_POLL_INTERVAL_MS", 300000),
 			SessionTimeoutMs:  getEnvInt("SOURCE_KAFKA_SESSION_TIMEOUT_MS", 10000),
@@ -166,43 +166,43 @@ func Load() (*Config, error) {
 			CommitIntervalMs:  getEnvInt("SOURCE_KAFKA_COMMIT_INTERVAL_MS", 5000),
 		},
 		HTTP: HTTPConfig{
-			ServiceURL:                       getEnv("SINK_HTTP_SERVICE_URL", ""),
-			RequestMethod:                    getEnv("SINK_HTTP_REQUEST_METHOD", "POST"),
-			RequestTimeoutMs:                 getEnvInt("SINK_HTTP_REQUEST_TIMEOUT_MS", 10000),
-			MaxConnections:                   getEnvInt("SINK_HTTP_MAX_CONNECTIONS", 10),
-			ConnectionTtlMs:                  getEnvInt("SINK_HTTP_CONNECTION_TTL_MS", 30000),
-			ConnectionIdleEvictMs:            getEnvInt("SINK_HTTP_CONNECTION_IDLE_EVICT_MS", 30000),
-			ConnectionValidateInactivityMs:   getEnvInt("SINK_HTTP_CONNECTION_VALIDATE_INACTIVITY_MS", 2000),
-			Headers:                          nil,
-			DataFormat:                       getEnv("SINK_HTTP_DATA_FORMAT", "json"),
-			JSONBodyTemplate:                 getEnv("SINK_HTTP_JSON_BODY_TEMPLATE", ""),
-			WorkerPoolSize:                   getEnvInt("SINK_WORKER_POOL_SIZE", 10),
-			WorkerPoolBuffer:                 getEnvInt("SINK_WORKER_POOL_BUFFER", 10),
-			ErrorRetryStatusCodes:            ParseStatusRangeList(getEnv("SINK_HTTP_ERROR_RETRY_STATUS_CODES", "500-599,429,408")),
-			ErrorDLQStatusCodes:              ParseStatusRangeList(getEnv("SINK_HTTP_ERROR_DLQ_STATUS_CODES", "400-428,430-499,500-599")),
-			ErrorFailStatusCodes:             ParseStatusRangeList(getEnv("SINK_HTTP_ERROR_FAIL_STATUS_CODES", "")),
-			RetryMaxAttempts:                 getEnvInt("SINK_HTTP_RETRY_MAX_ATTEMPTS", 3),
-			RetryBackoffInitialMs:            getEnvInt("SINK_HTTP_RETRY_BACKOFF_INITIAL_MS", 100),
-			RetryBackoffMaxMs:                getEnvInt("SINK_HTTP_RETRY_BACKOFF_MAX_MS", 10000),
-			RetryBackoffMultiplier:            getEnvFloat("SINK_HTTP_RETRY_BACKOFF_MULTIPLIER", 2.0),
-			CircuitBreakerEnabled:            getEnvBool("SINK_HTTP_CIRCUIT_BREAKER_ENABLED", true),
-			CircuitBreakerFailureThreshold:   getEnvInt("SINK_HTTP_CIRCUIT_BREAKER_FAILURE_THRESHOLD", 80),
-			CircuitBreakerWindowSize:         getEnvInt("SINK_HTTP_CIRCUIT_BREAKER_WINDOW_SIZE", 100),
-			CircuitBreakerResetTimeoutMs:     getEnvInt("SINK_HTTP_CIRCUIT_BREAKER_RESET_TIMEOUT_MS", 10000),
-			DLQEnabled:                       getEnvBool("SINK_HTTP_DLQ_ENABLED", true),
-			DLQType:                          getEnv("SINK_HTTP_DLQ_TYPE", "kafka"),
-			DLQKafkaTopic:                    getEnv("SINK_HTTP_DLQ_KAFKA_TOPIC", "goose-dlq"),
-			DLQKafkaBrokers:                  getEnv("SINK_HTTP_DLQ_KAFKA_BROKERS", ""),
-			OAuth2Enabled:                    getEnvBool("SINK_HTTP_OAUTH2_ENABLED", false),
-			OAuth2AccessTokenURL:             getEnv("SINK_HTTP_OAUTH2_ACCESS_TOKEN_URL", ""),
-			OAuth2ClientName:                 getEnv("SINK_HTTP_OAUTH2_CLIENT_NAME", ""),
-			OAuth2ClientSecret:               getEnv("SINK_HTTP_OAUTH2_CLIENT_SECRET", ""),
-			OAuth2Scope:                      getEnv("SINK_HTTP_OAUTH2_SCOPE", ""),
-			FilterEnabled:                    getEnvBool("SINK_HTTP_FILTER_ENABLED", false),
-			FilterJSONPath:                   getEnv("SINK_HTTP_FILTER_JSONPATH", ""),
+			ServiceURL:                     getEnv("SINK_HTTP_SERVICE_URL", ""),
+			RequestMethod:                  getEnv("SINK_HTTP_REQUEST_METHOD", "POST"),
+			RequestTimeoutMs:               getEnvInt("SINK_HTTP_REQUEST_TIMEOUT_MS", 10000),
+			MaxConnections:                 getEnvInt("SINK_HTTP_MAX_CONNECTIONS", 10),
+			ConnectionTtlMs:                getEnvInt("SINK_HTTP_CONNECTION_TTL_MS", 30000),
+			ConnectionIdleEvictMs:          getEnvInt("SINK_HTTP_CONNECTION_IDLE_EVICT_MS", 30000),
+			ConnectionValidateInactivityMs: getEnvInt("SINK_HTTP_CONNECTION_VALIDATE_INACTIVITY_MS", 2000),
+			Headers:                        nil,
+			DataFormat:                     getEnv("SINK_HTTP_DATA_FORMAT", "json"),
+			JSONBodyTemplate:               getEnv("SINK_HTTP_JSON_BODY_TEMPLATE", ""),
+			WorkerPoolSize:                 getEnvInt("SINK_WORKER_POOL_SIZE", 10),
+			WorkerPoolBuffer:               getEnvInt("SINK_WORKER_POOL_BUFFER", 10),
+			ErrorRetryStatusCodes:          ParseStatusRangeList(getEnv("SINK_HTTP_ERROR_RETRY_STATUS_CODES", "500-599,429,408")),
+			ErrorDLQStatusCodes:            ParseStatusRangeList(getEnv("SINK_HTTP_ERROR_DLQ_STATUS_CODES", "400-428,430-499,500-599")),
+			ErrorFailStatusCodes:           ParseStatusRangeList(getEnv("SINK_HTTP_ERROR_FAIL_STATUS_CODES", "")),
+			RetryMaxAttempts:               getEnvInt("SINK_HTTP_RETRY_MAX_ATTEMPTS", 3),
+			RetryBackoffInitialMs:          getEnvInt("SINK_HTTP_RETRY_BACKOFF_INITIAL_MS", 100),
+			RetryBackoffMaxMs:              getEnvInt("SINK_HTTP_RETRY_BACKOFF_MAX_MS", 10000),
+			RetryBackoffMultiplier:         getEnvFloat("SINK_HTTP_RETRY_BACKOFF_MULTIPLIER", 2.0),
+			CircuitBreakerEnabled:          getEnvBool("SINK_HTTP_CIRCUIT_BREAKER_ENABLED", true),
+			CircuitBreakerFailureThreshold: getEnvInt("SINK_HTTP_CIRCUIT_BREAKER_FAILURE_THRESHOLD", 80),
+			CircuitBreakerWindowSize:       getEnvInt("SINK_HTTP_CIRCUIT_BREAKER_WINDOW_SIZE", 100),
+			CircuitBreakerResetTimeoutMs:   getEnvInt("SINK_HTTP_CIRCUIT_BREAKER_RESET_TIMEOUT_MS", 10000),
+			DLQEnabled:                     getEnvBool("SINK_HTTP_DLQ_ENABLED", true),
+			DLQType:                        getEnv("SINK_HTTP_DLQ_TYPE", "kafka"),
+			DLQKafkaTopic:                  getEnv("SINK_HTTP_DLQ_KAFKA_TOPIC", "goose-dlq"),
+			DLQKafkaBrokers:                getEnv("SINK_HTTP_DLQ_KAFKA_BROKERS", ""),
+			OAuth2Enabled:                  getEnvBool("SINK_HTTP_OAUTH2_ENABLED", false),
+			OAuth2AccessTokenURL:           getEnv("SINK_HTTP_OAUTH2_ACCESS_TOKEN_URL", ""),
+			OAuth2ClientName:               getEnv("SINK_HTTP_OAUTH2_CLIENT_NAME", ""),
+			OAuth2ClientSecret:             getEnv("SINK_HTTP_OAUTH2_CLIENT_SECRET", ""),
+			OAuth2Scope:                    getEnv("SINK_HTTP_OAUTH2_SCOPE", ""),
+			FilterEnabled:                  getEnvBool("SINK_HTTP_FILTER_ENABLED", false),
+			FilterJSONPath:                 getEnv("SINK_HTTP_FILTER_JSONPATH", ""),
 		},
 		Schema: SchemaConfig{
-			InputSchemaDataType:      getEnv("SCHEMA_INPUT_DATA_TYPE", "json"),
+			InputSchemaDataType:      getEnv("INPUT_SCHEMA_DATA_TYPE", "json"),
 			SchemaRegistryEnabled:    getEnvBool("SCHEMA_REGISTRY_ENABLED", false),
 			SchemaRegistryURL:        getEnv("SCHEMA_REGISTRY_URL", ""),
 			SchemaRegistryProtoClass: getEnv("SCHEMA_REGISTRY_PROTO_CLASS", ""),
@@ -216,9 +216,9 @@ func Load() (*Config, error) {
 			PrometheusPort:    getEnvInt("METRICS_PROMETHEUS_PORT", 9090),
 		},
 		Tracing: TracingConfig{
-			Enabled:      getEnvBool("TRACING_ENABLED", false),
-			OTLPEndpoint: getEnv("TRACING_OTLP_ENDPOINT", ""),
-			ServiceName:  getEnv("TRACING_SERVICE_NAME", "goose"),
+			Enabled:      getEnvBool("OTEL_TRACING_ENABLED", false),
+			OTLPEndpoint: getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
+			ServiceName:  getEnv("OTEL_SERVICE_NAME", "goose"),
 		},
 	}
 
@@ -238,6 +238,18 @@ func (c *Config) Validate() error {
 	}
 	if strings.TrimSpace(c.HTTP.ServiceURL) == "" {
 		return errors.New("SINK_HTTP_SERVICE_URL is required")
+	}
+	if strings.TrimSpace(c.Kafka.ConsumerGroupID) == "" {
+		return errors.New("SOURCE_KAFKA_CONSUMER_GROUP_ID is required")
+	}
+	if c.HTTP.WorkerPoolSize <= 0 {
+		return errors.New("SINK_WORKER_POOL_SIZE must be > 0")
+	}
+	if c.HTTP.MaxConnections <= 0 {
+		return errors.New("SINK_HTTP_MAX_CONNECTIONS must be > 0")
+	}
+	if c.HTTP.DLQEnabled && c.HTTP.DLQType == "kafka" && strings.TrimSpace(c.HTTP.DLQKafkaBrokers) == "" {
+		return errors.New("SINK_HTTP_DLQ_KAFKA_BROKERS is required when DLQ is enabled with type kafka")
 	}
 	return nil
 }

@@ -42,7 +42,7 @@ func TestFailedMessageErrorInfo(t *testing.T) {
 		Key:       []byte("order-123"),
 		Value:     []byte(`{"event":"created"}`),
 		ErrorInfo: ErrorInfo{
-			ErrorType: ErrorTypeSink5xx,
+			ErrorType:  ErrorTypeSink5xx,
 			StatusCode: 503,
 			Message:    "service unavailable",
 		},

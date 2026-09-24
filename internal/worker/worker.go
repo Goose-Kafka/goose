@@ -3,10 +3,12 @@ package worker
 import (
 	"context"
 	"log"
+	"strconv"
 	"sync"
 	"time"
 
 	errorpkg "github.com/arelligoutham/goose/internal/error"
+	"github.com/arelligoutham/goose/internal/metrics"
 	"github.com/arelligoutham/goose/internal/sink"
 )
 
@@ -20,17 +22,17 @@ type DLQWriter interface {
 // to a sink, routes failures through the error handler, records circuit
 // breaker results, and signals batch completion for offset commit.
 type Worker struct {
-	id            int
-	sink          sink.Sink
-	errorHandler  *errorpkg.ErrorHandler
-	backoff       *errorpkg.ExponentialBackoff
+	id             int
+	sink           sink.Sink
+	errorHandler   *errorpkg.ErrorHandler
+	backoff        *errorpkg.ExponentialBackoff
 	circuitBreaker *errorpkg.CircuitBreaker
-	doneChan      chan string
-	maxRetries    int
-	dlqWriter     DLQWriter
+	doneChan       chan string
+	maxRetries     int
+	dlqWriter      DLQWriter
+	metrics        *metrics.Metrics
 }
 
-// NewWorker creates a new worker with the given dependencies.
 func NewWorker(
 	id int,
 	s sink.Sink,
@@ -40,6 +42,7 @@ func NewWorker(
 	doneChan chan string,
 	maxRetries int,
 	dlqWriter DLQWriter,
+	m *metrics.Metrics,
 ) *Worker {
 	return &Worker{
 		id:             id,
@@ -50,6 +53,7 @@ func NewWorker(
 		doneChan:       doneChan,
 		maxRetries:     maxRetries,
 		dlqWriter:      dlqWriter,
+		metrics:        m,
 	}
 }
 
@@ -91,10 +95,33 @@ func (w *Worker) processBatch(ctx context.Context, batch *Batch) {
 		}
 	}
 
+	start := time.Now()
+
 	failed, err := w.sink.Push(batch.Messages)
+	sinkDuration := time.Since(start).Seconds()
+
 	if err != nil {
 		log.Printf("[worker %d] sink push error: %v", w.id, err)
 		failed = allFailed(batch.Messages, err.Error())
+	}
+
+	// Record metrics
+	if w.metrics != nil {
+		w.metrics.SinkLatency.WithLabelValues("http").Observe(sinkDuration)
+		delivered := len(batch.Messages) - len(failed)
+		if delivered > 0 {
+			w.metrics.MessagesDelivered.WithLabelValues("http").Add(float64(delivered))
+		}
+		// Record HTTP response codes from failed messages
+		for _, f := range failed {
+			if f.ErrorInfo.StatusCode > 0 {
+				w.metrics.HTTPResponseCodes.WithLabelValues(strconv.Itoa(f.ErrorInfo.StatusCode)).Inc()
+			}
+		}
+		// Count successful HTTP responses (2xx) for the batch
+		if err == nil && len(failed) == 0 {
+			w.metrics.HTTPResponseCodes.WithLabelValues("200").Add(float64(len(batch.Messages)))
+		}
 	}
 
 	if len(failed) == 0 {
@@ -120,13 +147,19 @@ func (w *Worker) handleFailures(ctx context.Context, failed []errorpkg.FailedMes
 		action := w.errorHandler.Route(msg)
 		switch action {
 		case errorpkg.ActionRetry:
+			if w.metrics != nil {
+				w.metrics.MessagesRetried.WithLabelValues(string(msg.ErrorInfo.ErrorType)).Inc()
+			}
 			w.retryMessage(ctx, msg)
 		case errorpkg.ActionDLQ:
 			w.sendToDLQ(ctx, msg)
 		case errorpkg.ActionIgnore:
+			if w.metrics != nil {
+				w.metrics.MessagesIgnored.WithLabelValues(string(msg.ErrorInfo.ErrorType)).Inc()
+			}
 			log.Printf("[worker %d] ignoring message offset=%d: %s", w.id, msg.Offset, msg.ErrorInfo)
 		case errorpkg.ActionFail:
-			log.Printf("[worker %d] FAIL action for message offset=%d: %s", w.id, msg.Offset, msg.ErrorInfo)
+			log.Panicf("[worker %d] FAIL action for message offset=%d: %s — crashing consumer", w.id, msg.Offset, msg.ErrorInfo)
 		}
 	}
 }
@@ -154,10 +187,17 @@ func (w *Worker) retryMessage(ctx context.Context, msg errorpkg.FailedMessage) {
 			}
 			if attempt == w.maxRetries {
 				log.Printf("[worker %d] retry exhausted for offset=%d, re-routing", w.id, msg.Offset)
-				retry := w.errorHandler.Route(msg)
-				switch retry {
+				action := w.errorHandler.Route(msg)
+				switch action {
 				case errorpkg.ActionDLQ:
 					w.sendToDLQ(ctx, msg)
+				case errorpkg.ActionIgnore:
+					if w.metrics != nil {
+						w.metrics.MessagesIgnored.WithLabelValues(string(msg.ErrorInfo.ErrorType)).Inc()
+					}
+					log.Printf("[worker %d] dropping message offset=%d after retry exhaustion (no DLQ)", w.id, msg.Offset)
+				case errorpkg.ActionFail:
+					log.Panicf("[worker %d] FAIL after retry exhaustion for offset=%d: %s", w.id, msg.Offset, msg.ErrorInfo)
 				default:
 					log.Printf("[worker %d] dropping message offset=%d after retry exhaustion", w.id, msg.Offset)
 				}
@@ -178,6 +218,8 @@ func (w *Worker) sendToDLQ(ctx context.Context, msg errorpkg.FailedMessage) {
 	if w.dlqWriter != nil {
 		if err := w.dlqWriter.Write([]errorpkg.FailedMessage{msg}); err != nil {
 			log.Printf("[worker %d] DLQ write error for offset=%d: %v", w.id, msg.Offset, err)
+		} else if w.metrics != nil {
+			w.metrics.MessagesDLQ.WithLabelValues(string(msg.ErrorInfo.ErrorType)).Inc()
 		}
 	} else {
 		log.Printf("[worker %d] dropping message to DLQ (no writer configured) offset=%d: %s", w.id, msg.Offset, msg.ErrorInfo)

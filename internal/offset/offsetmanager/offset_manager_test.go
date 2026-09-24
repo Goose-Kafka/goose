@@ -125,3 +125,121 @@ func TestGetCommittableIdempotent(t *testing.T) {
 		t.Errorf("GetCommittable() not idempotent: first=%v second=%v", first, second)
 	}
 }
+
+func TestPruneCommitted(t *testing.T) {
+	om := New()
+
+	om.AddBatch("batch-1", []Message{
+		{Topic: "test", Partition: 0, Offset: 1},
+		{Topic: "test", Partition: 0, Offset: 2},
+	})
+	om.AddBatch("batch-2", []Message{
+		{Topic: "test", Partition: 0, Offset: 3},
+		{Topic: "test", Partition: 0, Offset: 4},
+	})
+	om.SetCommittable("batch-1")
+	om.SetCommittable("batch-2")
+
+	committable := om.GetCommittable()
+	want := map[TopicPartition]int64{
+		{Topic: "test", Partition: 0}: 5,
+	}
+	if !reflect.DeepEqual(committable, want) {
+		t.Fatalf("GetCommittable() = %v, want %v", committable, want)
+	}
+
+	om.PruneCommitted(committable)
+
+	// After pruning, all committed offsets (1-4) are removed. GetCommittable
+	// returns empty because nothing remains.
+	pruned := om.GetCommittable()
+	if len(pruned) != 0 {
+		t.Errorf("GetCommittable() after PruneCommitted = %v, want empty map", pruned)
+	}
+
+	// Add new offset and verify contiguity gating works correctly after pruning.
+	om.AddBatch("batch-3", []Message{
+		{Topic: "test", Partition: 0, Offset: 5},
+	})
+	// batch-3 is not yet committable, so nothing should be committable
+	got := om.GetCommittable()
+	if len(got) != 0 {
+		t.Errorf("GetCommittable() with pending batch-3 = %v, want empty map", got)
+	}
+
+	om.SetCommittable("batch-3")
+	got = om.GetCommittable()
+	wantAfter := map[TopicPartition]int64{
+		{Topic: "test", Partition: 0}: 6,
+	}
+	if !reflect.DeepEqual(got, wantAfter) {
+		t.Errorf("GetCommittable() after batch-3 = %v, want %v", got, wantAfter)
+	}
+}
+
+func TestPruneCommittedMultiplePartitions(t *testing.T) {
+	om := New()
+
+	om.AddBatch("batch-1", []Message{
+		{Topic: "topic-a", Partition: 0, Offset: 10},
+		{Topic: "topic-b", Partition: 1, Offset: 20},
+	})
+	om.SetCommittable("batch-1")
+
+	committable := om.GetCommittable()
+	want := map[TopicPartition]int64{
+		{Topic: "topic-a", Partition: 0}: 11,
+		{Topic: "topic-b", Partition: 1}: 21,
+	}
+	if !reflect.DeepEqual(committable, want) {
+		t.Fatalf("GetCommittable() = %v, want %v", committable, want)
+	}
+
+	om.PruneCommitted(committable)
+
+	// After pruning, both partitions should be empty.
+	got := om.GetCommittable()
+	if len(got) != 0 {
+		t.Errorf("GetCommittable() after prune = %v, want empty map", got)
+	}
+}
+
+func TestPruneCommittedPreservesUncommitted(t *testing.T) {
+	om := New()
+
+	om.AddBatch("batch-1", []Message{
+		{Topic: "test", Partition: 0, Offset: 1},
+	})
+	om.AddBatch("batch-2", []Message{
+		{Topic: "test", Partition: 0, Offset: 2},
+	})
+	// Only batch-1 is committable — batch-2 is pending.
+	om.SetCommittable("batch-1")
+
+	committable := om.GetCommittable()
+	want := map[TopicPartition]int64{
+		{Topic: "test", Partition: 0}: 2,
+	}
+	if !reflect.DeepEqual(committable, want) {
+		t.Fatalf("GetCommittable() = %v, want %v", committable, want)
+	}
+
+	om.PruneCommitted(committable)
+
+	// Prune removes offset 1 (< 2) but keeps offset 2 (== 2, not < 2).
+	// Offset 2 is not committable, so GetCommittable returns empty.
+	got := om.GetCommittable()
+	if len(got) != 0 {
+		t.Errorf("GetCommittable() after prune = %v, want empty (offset 2 not committable)", got)
+	}
+
+	// Now mark batch-2 done — offset 2 should become committable.
+	om.SetCommittable("batch-2")
+	got = om.GetCommittable()
+	wantAfter := map[TopicPartition]int64{
+		{Topic: "test", Partition: 0}: 3,
+	}
+	if !reflect.DeepEqual(got, wantAfter) {
+		t.Errorf("GetCommittable() after batch-2 = %v, want %v", got, wantAfter)
+	}
+}
