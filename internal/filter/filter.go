@@ -16,8 +16,9 @@ type Message struct {
 }
 
 type FilterConfig struct {
-	Expression string
-	MatchValue string
+	Engine     string // "jsonpath" or "cel"
+	Expression string // JSONPath path or CEL expression
+	MatchValue string // for jsonpath: the value to match; for cel: ignored
 }
 
 type Filter interface {
@@ -30,6 +31,20 @@ func NewNoOpFilter() *NoOpFilter { return &NoOpFilter{} }
 
 func (f *NoOpFilter) Apply(msgs []Message) (passed []Message, dropped []Message) {
 	return msgs, nil
+}
+
+// NewFilter creates a Filter based on the config engine type.
+// engine "jsonpath" → JSONPathFilter (simple field match)
+// engine "cel" → CELFilter (full expression evaluation)
+func NewFilter(cfg FilterConfig) (Filter, error) {
+	switch cfg.Engine {
+	case "cel":
+		return NewCELFilter(cfg.Expression)
+	case "jsonpath", "":
+		return NewJSONPathFilter(cfg)
+	default:
+		return nil, fmt.Errorf("unknown filter engine: %q (supported: jsonpath, cel)", cfg.Engine)
+	}
 }
 
 type JSONPathFilter struct {

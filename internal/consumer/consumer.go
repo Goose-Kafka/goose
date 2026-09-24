@@ -67,10 +67,32 @@ func New(cfg *config.Config, batchChan chan<- *worker.Batch, doneChan <-chan str
 
 	var f filter.Filter
 	if cfg.HTTP.FilterEnabled && cfg.HTTP.FilterJSONPath != "" {
+		// Parse filter config: "expression" for jsonpath or "expression" for cel
+		// The expression format determines the engine:
+		//   "$.field.path" → jsonpath
+		//   "field == value" → cel
+		engine := "jsonpath"
+		expression := cfg.HTTP.FilterJSONPath
+		matchValue := ""
+
+		// JSONPath expressions start with $, CEL expressions don't
+		if !strings.HasPrefix(expression, "$") && strings.ContainsAny(expression, "=<>!&|") {
+			engine = "cel"
+		} else if strings.Contains(expression, ":") {
+			// JSONPath with match value: "$.field:value"
+			parts := strings.SplitN(expression, ":", 2)
+			expression = strings.TrimSpace(parts[0])
+			matchValue = strings.TrimSpace(parts[1])
+		}
+
 		var ferr error
-		f, ferr = filter.NewJSONPathFilter(filter.FilterConfig{Expression: cfg.HTTP.FilterJSONPath})
+		f, ferr = filter.NewFilter(filter.FilterConfig{
+			Engine:     engine,
+			Expression: expression,
+			MatchValue: matchValue,
+		})
 		if ferr != nil {
-			log.Printf("consumer: invalid filter expression %q: %v, falling back to NoOp filter", cfg.HTTP.FilterJSONPath, ferr)
+			log.Printf("consumer: invalid filter expression %q (engine=%s): %v, falling back to NoOp filter", cfg.HTTP.FilterJSONPath, engine, ferr)
 			f = filter.NewNoOpFilter()
 		}
 	} else {
