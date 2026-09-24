@@ -52,8 +52,8 @@ func TestLoadConfigDefaults(t *testing.T) {
 	if cfg.Kafka.Brokers != "localhost:9092" {
 		t.Errorf("Kafka.Brokers = %q, want %q", cfg.Kafka.Brokers, "localhost:9092")
 	}
-	if cfg.HTTP.WorkerPoolSize != 10 {
-		t.Errorf("HTTP.WorkerPoolSize = %d, want 10", cfg.HTTP.WorkerPoolSize)
+	if cfg.HTTP.WorkerPoolSize != 50 {
+		t.Errorf("HTTP.WorkerPoolSize = %d, want 50", cfg.HTTP.WorkerPoolSize)
 	}
 	if cfg.HTTP.WorkerPoolBuffer != 10 {
 		t.Errorf("HTTP.WorkerPoolBuffer = %d, want 10", cfg.HTTP.WorkerPoolBuffer)
@@ -61,8 +61,8 @@ func TestLoadConfigDefaults(t *testing.T) {
 	if cfg.HTTP.RequestTimeoutMs != 10000 {
 		t.Errorf("HTTP.RequestTimeoutMs = %d, want 10000", cfg.HTTP.RequestTimeoutMs)
 	}
-	if cfg.HTTP.MaxConnections != 10 {
-		t.Errorf("HTTP.MaxConnections = %d, want 10", cfg.HTTP.MaxConnections)
+	if cfg.HTTP.MaxConnections != 50 {
+		t.Errorf("HTTP.MaxConnections = %d, want 50", cfg.HTTP.MaxConnections)
 	}
 	if cfg.HTTP.ConnectionTtlMs != 30000 {
 		t.Errorf("HTTP.ConnectionTtlMs = %d, want 30000", cfg.HTTP.ConnectionTtlMs)

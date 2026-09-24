@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"log"
 	"strconv"
 	"strings"
 )
@@ -169,14 +170,14 @@ func Load() (*Config, error) {
 			ServiceURL:                     getEnv("SINK_HTTP_SERVICE_URL", ""),
 			RequestMethod:                  getEnv("SINK_HTTP_REQUEST_METHOD", "POST"),
 			RequestTimeoutMs:               getEnvInt("SINK_HTTP_REQUEST_TIMEOUT_MS", 10000),
-			MaxConnections:                 getEnvInt("SINK_HTTP_MAX_CONNECTIONS", 10),
+			MaxConnections:                 getEnvInt("SINK_HTTP_MAX_CONNECTIONS", 50),
 			ConnectionTtlMs:                getEnvInt("SINK_HTTP_CONNECTION_TTL_MS", 30000),
 			ConnectionIdleEvictMs:          getEnvInt("SINK_HTTP_CONNECTION_IDLE_EVICT_MS", 30000),
 			ConnectionValidateInactivityMs: getEnvInt("SINK_HTTP_CONNECTION_VALIDATE_INACTIVITY_MS", 2000),
 			Headers:                        nil,
 			DataFormat:                     getEnv("SINK_HTTP_DATA_FORMAT", "json"),
 			JSONBodyTemplate:               getEnv("SINK_HTTP_JSON_BODY_TEMPLATE", ""),
-			WorkerPoolSize:                 getEnvInt("SINK_WORKER_POOL_SIZE", 10),
+			WorkerPoolSize:                 getEnvInt("SINK_WORKER_POOL_SIZE", 50),
 			WorkerPoolBuffer:               getEnvInt("SINK_WORKER_POOL_BUFFER", 10),
 			ErrorRetryStatusCodes:          ParseStatusRangeList(getEnv("SINK_HTTP_ERROR_RETRY_STATUS_CODES", "500-599,429,408")),
 			ErrorDLQStatusCodes:            ParseStatusRangeList(getEnv("SINK_HTTP_ERROR_DLQ_STATUS_CODES", "400-428,430-499,500-599")),
@@ -250,6 +251,13 @@ func (c *Config) Validate() error {
 	}
 	if c.HTTP.DLQEnabled && c.HTTP.DLQType == "kafka" && strings.TrimSpace(c.HTTP.DLQKafkaBrokers) == "" {
 		return errors.New("SINK_HTTP_DLQ_KAFKA_BROKERS is required when DLQ is enabled with type kafka")
+	}
+	// Auto-match connection pool size to worker pool size to prevent port exhaustion.
+	// Each worker needs a pooled connection; mismatch causes connection churn → TIME_WAIT buildup.
+	if c.HTTP.MaxConnections != c.HTTP.WorkerPoolSize {
+		log.Printf("config: auto-matching SINK_HTTP_MAX_CONNECTIONS (%d) to SINK_WORKER_POOL_SIZE (%d)",
+			c.HTTP.MaxConnections, c.HTTP.WorkerPoolSize)
+		c.HTTP.MaxConnections = c.HTTP.WorkerPoolSize
 	}
 	return nil
 }
