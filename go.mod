@@ -1,4 +1,4 @@
-module github.com/arelligoutham/goose
+module github.com/Goose-Kafka/goose
 
 go 1.27.0
 

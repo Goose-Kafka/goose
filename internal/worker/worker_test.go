@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/arelligoutham/goose/internal/config"
-	errorpkg "github.com/arelligoutham/goose/internal/error"
-	"github.com/arelligoutham/goose/internal/sink"
+	"github.com/Goose-Kafka/goose/internal/config"
+	errorpkg "github.com/Goose-Kafka/goose/internal/error"
+	"github.com/Goose-Kafka/goose/internal/sink"
 )
 
 func TestWorkerProcessesBatchSuccessfully(t *testing.T) {

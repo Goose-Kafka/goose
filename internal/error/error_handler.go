@@ -1,6 +1,6 @@
 package errorpkg
 
-import "github.com/arelligoutham/goose/internal/config"
+import "github.com/Goose-Kafka/goose/internal/config"
 
 // Action represents the routing decision the error handler makes for a failed
 // message.

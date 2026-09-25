@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	errorpkg "github.com/arelligoutham/goose/internal/error"
-	"github.com/arelligoutham/goose/internal/metrics"
-	"github.com/arelligoutham/goose/internal/sink"
+	errorpkg "github.com/Goose-Kafka/goose/internal/error"
+	"github.com/Goose-Kafka/goose/internal/metrics"
+	"github.com/Goose-Kafka/goose/internal/sink"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"

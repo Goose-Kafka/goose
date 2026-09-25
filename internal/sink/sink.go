@@ -1,6 +1,6 @@
 package sink
 
-import errorpkg "github.com/arelligoutham/goose/internal/error"
+import errorpkg "github.com/Goose-Kafka/goose/internal/error"
 
 // Message represents a single message to be delivered to a sink.
 type Message struct {

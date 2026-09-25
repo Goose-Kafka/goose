@@ -3,7 +3,7 @@ package errorpkg
 import (
 	"testing"
 
-	"github.com/arelligoutham/goose/internal/config"
+	"github.com/Goose-Kafka/goose/internal/config"
 )
 
 func TestErrorHandlerRoute5xxToRetry(t *testing.T) {

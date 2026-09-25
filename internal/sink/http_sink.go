@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	errorpkg "github.com/arelligoutham/goose/internal/error"
+	errorpkg "github.com/Goose-Kafka/goose/internal/error"
 )
 
 // HTTPSink delivers messages to an HTTP endpoint. It supports two modes:

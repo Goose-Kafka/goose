@@ -65,7 +65,7 @@ helm install goose ./helm \
 
 ```sh
 # Clone the repo
-git clone https://github.com/ArelliGoutham/goose.git
+git clone https://github.com/Goose-Kafka/goose.git
 cd goose
 
 # Build the binary

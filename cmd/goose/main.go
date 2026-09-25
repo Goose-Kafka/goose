@@ -13,14 +13,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/arelligoutham/goose/internal/config"
-	"github.com/arelligoutham/goose/internal/consumer"
-	errorpkg "github.com/arelligoutham/goose/internal/error"
-	"github.com/arelligoutham/goose/internal/metrics"
-	"github.com/arelligoutham/goose/internal/offset/offsetmanager"
-	"github.com/arelligoutham/goose/internal/sink"
-	"github.com/arelligoutham/goose/internal/tracing"
-	"github.com/arelligoutham/goose/internal/worker"
+	"github.com/Goose-Kafka/goose/internal/config"
+	"github.com/Goose-Kafka/goose/internal/consumer"
+	errorpkg "github.com/Goose-Kafka/goose/internal/error"
+	"github.com/Goose-Kafka/goose/internal/metrics"
+	"github.com/Goose-Kafka/goose/internal/offset/offsetmanager"
+	"github.com/Goose-Kafka/goose/internal/sink"
+	"github.com/Goose-Kafka/goose/internal/tracing"
+	"github.com/Goose-Kafka/goose/internal/worker"
 	"github.com/segmentio/kafka-go"
 )
 

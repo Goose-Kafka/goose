@@ -3,9 +3,9 @@ package consumer
 import (
 	"testing"
 
-	"github.com/arelligoutham/goose/internal/config"
-	"github.com/arelligoutham/goose/internal/filter"
-	"github.com/arelligoutham/goose/internal/worker"
+	"github.com/Goose-Kafka/goose/internal/config"
+	"github.com/Goose-Kafka/goose/internal/filter"
+	"github.com/Goose-Kafka/goose/internal/worker"
 )
 
 func TestConsumerCreation(t *testing.T) {
