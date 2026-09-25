@@ -69,20 +69,21 @@ func New(cfg *config.Config, batchChan chan<- *worker.Batch, doneChan <-chan str
 	if cfg.HTTP.FilterEnabled && cfg.HTTP.FilterJSONPath != "" {
 		// Parse filter config: "expression" for jsonpath or "expression" for cel
 		// The expression format determines the engine:
-		//   "$.field.path" → jsonpath
-		//   "field == value" → cel
-		engine := "jsonpath"
+		//   "$.field.path" → jsonpath (starts with $)
+		//   "field == value" → cel (doesn't start with $)
+		engine := "cel"
 		expression := cfg.HTTP.FilterJSONPath
 		matchValue := ""
 
 		// JSONPath expressions start with $, CEL expressions don't
-		if !strings.HasPrefix(expression, "$") && strings.ContainsAny(expression, "=<>!&|") {
-			engine = "cel"
-		} else if strings.Contains(expression, ":") {
+		if strings.HasPrefix(expression, "$") {
+			engine = "jsonpath"
 			// JSONPath with match value: "$.field:value"
-			parts := strings.SplitN(expression, ":", 2)
-			expression = strings.TrimSpace(parts[0])
-			matchValue = strings.TrimSpace(parts[1])
+			if strings.Contains(expression, ":") {
+				parts := strings.SplitN(expression, ":", 2)
+				expression = strings.TrimSpace(parts[0])
+				matchValue = strings.TrimSpace(parts[1])
+			}
 		}
 
 		var ferr error
