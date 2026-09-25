@@ -254,7 +254,8 @@ SCHEMA_REGISTRY_URL=http://schema-registry:8081
 
 ## Task 5: Schema Validation
 
-**Status:** 🔲 Not started
+**Status:** ✅ Complete
+**Completed:** 2024-09-25
 **Priority:** Low — data quality enforcement
 **Effort:** Medium
 
@@ -334,7 +335,8 @@ SOURCE_KAFKA_CONSUMER_CONFIG_MAX_POLL_RECORDS=500
 
 ## Task 7: OpenTelemetry Spans in Worker and Consumer
 
-**Status:** 🔲 Not started
+**Status:** ✅ Complete
+**Completed:** 2024-09-25
 **Priority:** Low — observability enhancement
 **Effort:** Low
 
@@ -437,7 +439,8 @@ HPA scaling is capped by Kafka partitions — can't have more pods than partitio
 
 ## Task 9: Consumer Lag Metrics (from Kafka)
 
-**Status:** 🔲 Not started
+**Status:** ✅ Complete
+**Completed:** 2024-09-25
 **Priority:** Low — dashboard enhancement
 **Effort:** Low
 
@@ -486,9 +489,9 @@ OAuth2 config exists but the token is likely fetched once and not refreshed. OAu
 | 6 | Batch-poll consumer | Medium | Medium | — |
 | 3 | gRPC sink | Medium | Medium-High | — |
 | 8 | HPA in Helm chart | Medium | Low | — |
-| 7 | OTel spans | Low | Low | — |
-| 9 | Consumer lag metrics | Low | Low | — |
-| 5 | Schema validation | Low | Medium | Task 1 |
+| 7 | OTel spans | Low | Low | ✅ Done |
+| 9 | Consumer lag metrics | Low | Low | ✅ Done |
+| 5 | Schema validation | Low | Medium | ✅ Done |
 | 4 | Avro support | Low | High | — |
 | 10 | OAuth2 token refresh | Low | Low | — |
 

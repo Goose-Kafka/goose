@@ -30,6 +30,7 @@ type Metrics struct {
 	HTTPResponseCodes    *prometheus.CounterVec
 	OffsetCommits        *prometheus.CounterVec
 	SchemaUpdates        *prometheus.CounterVec
+	ValidationFailed     *prometheus.CounterVec
 }
 
 // NewMetrics creates all firehose metrics and registers them with a custom
@@ -110,6 +111,11 @@ func NewMetrics() *Metrics {
 		Help: "Total number of schema registry updates.",
 	}, []string{"proto_class"})
 
+	m.ValidationFailed = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "firehose_messages_validation_failed_total",
+		Help: "Messages that failed schema validation",
+	}, []string{"reason"})
+
 	reg.MustRegister(
 		m.MessagesConsumed,
 		m.MessagesFiltered,
@@ -125,6 +131,7 @@ func NewMetrics() *Metrics {
 		m.HTTPResponseCodes,
 		m.OffsetCommits,
 		m.SchemaUpdates,
+		m.ValidationFailed,
 	)
 
 	return m

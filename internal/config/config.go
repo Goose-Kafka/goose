@@ -10,11 +10,12 @@ import (
 // Config is the top-level configuration for the goose firehose, assembled from
 // environment variables.
 type Config struct {
-	Kafka   KafkaConfig
-	HTTP    HTTPConfig
-	Schema  SchemaConfig
-	Metrics MetricsConfig
-	Tracing TracingConfig
+	Kafka      KafkaConfig
+	HTTP       HTTPConfig
+	Schema     SchemaConfig
+	Validation ValidationConfig
+	Metrics    MetricsConfig
+	Tracing    TracingConfig
 }
 
 // KafkaConfig holds source Kafka consumer settings.
@@ -79,6 +80,12 @@ type SchemaConfig struct {
 	RefreshIntervalMs        int
 	FetchTimeoutMs           int
 	AuthBearerToken          string
+}
+
+type ValidationConfig struct {
+	Enabled       bool
+	CELExpression string
+	OnFailure     string // "dlq", "ignore", "drop"
 }
 
 // MetricsConfig holds Prometheus metrics settings.
@@ -211,6 +218,11 @@ func Load() (*Config, error) {
 			RefreshIntervalMs:        getEnvInt("SCHEMA_REGISTRY_REFRESH_INTERVAL_MS", 300000),
 			FetchTimeoutMs:           getEnvInt("SCHEMA_REGISTRY_FETCH_TIMEOUT_MS", 10000),
 			AuthBearerToken:          getEnv("SCHEMA_REGISTRY_AUTH_BEARER_TOKEN", ""),
+		},
+		Validation: ValidationConfig{
+			Enabled:       getEnvBool("SCHEMA_VALIDATION_ENABLED", false),
+			CELExpression: getEnv("SCHEMA_VALIDATION_CEL_EXPRESSION", ""),
+			OnFailure:     getEnv("SCHEMA_VALIDATION_ON_FAILURE", "dlq"),
 		},
 		Metrics: MetricsConfig{
 			PrometheusEnabled: getEnvBool("METRICS_PROMETHEUS_ENABLED", true),

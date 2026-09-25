@@ -10,6 +10,9 @@ import (
 	errorpkg "github.com/arelligoutham/goose/internal/error"
 	"github.com/arelligoutham/goose/internal/metrics"
 	"github.com/arelligoutham/goose/internal/sink"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // DLQWriter writes failed messages to a Dead Letter Queue. The implementation
@@ -83,6 +86,17 @@ func (w *Worker) processBatch(ctx context.Context, batch *Batch) {
 		}
 	}()
 
+	// OTel span: firehose.process_batch
+	tracer := otel.Tracer("goose")
+	ctx, span := tracer.Start(ctx, "firehose.process_batch",
+		trace.WithAttributes(
+			attribute.String("batch.id", batch.ID),
+			attribute.Int("batch.size", len(batch.Messages)),
+			attribute.Int("worker.id", w.id),
+		),
+	)
+	defer span.End()
+
 	// Check circuit breaker before making outbound calls.
 	if w.circuitBreaker != nil {
 		for !w.circuitBreaker.Allow() {
@@ -123,6 +137,12 @@ func (w *Worker) processBatch(ctx context.Context, batch *Batch) {
 			w.metrics.HTTPResponseCodes.WithLabelValues("200").Add(float64(len(batch.Messages)))
 		}
 	}
+
+	span.SetAttributes(
+		attribute.Int("http.delivered", len(batch.Messages)-len(failed)),
+		attribute.Int("http.failed", len(failed)),
+		attribute.Float64("http.duration_ms", sinkDuration*1000),
+	)
 
 	if len(failed) == 0 {
 		if w.circuitBreaker != nil {

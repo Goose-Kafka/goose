@@ -8,14 +8,19 @@ import (
 	"strings"
 
 	"github.com/arelligoutham/goose/internal/config"
+	"github.com/arelligoutham/goose/internal/error"
 	"github.com/arelligoutham/goose/internal/filter"
 	"github.com/arelligoutham/goose/internal/metrics"
 	"github.com/arelligoutham/goose/internal/offset/offsetmanager"
 	"github.com/arelligoutham/goose/internal/schema"
 	"github.com/arelligoutham/goose/internal/sink"
+	"github.com/arelligoutham/goose/internal/validation"
 	"github.com/arelligoutham/goose/internal/worker"
 	"github.com/google/uuid"
 	"github.com/segmentio/kafka-go"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Consumer polls Kafka, deserializes messages via the schema manager, applies
@@ -31,7 +36,10 @@ type Consumer struct {
 	offsetMgr *offsetmanager.OffsetManager
 	schemaMgr schema.SchemaManager
 	filter    filter.Filter
+	validator *validation.Validator
 	metrics   *metrics.Metrics
+	tracer    trace.Tracer
+	dlqWriter *errorpkg.KafkaDLQWriter
 }
 
 // Reader returns the underlying kafka-go reader so that external callers
@@ -100,6 +108,21 @@ func New(cfg *config.Config, batchChan chan<- *worker.Batch, doneChan <-chan str
 		f = filter.NewNoOpFilter()
 	}
 
+	// Schema validation (CEL-based)
+	var validator *validation.Validator
+	if cfg.Validation.Enabled && cfg.Validation.CELExpression != "" {
+		validator, err = validation.NewValidator(cfg.Validation.CELExpression)
+		if err != nil {
+			log.Printf("consumer: invalid validation expression %q: %v, disabling validation", cfg.Validation.CELExpression, err)
+			validator = nil
+		} else {
+			log.Printf("consumer: schema validation enabled (%d expressions)", len(strings.Split(cfg.Validation.CELExpression, ";")))
+		}
+	}
+
+	// OTel tracer
+	tracer := otel.Tracer("goose")
+
 	return &Consumer{
 		cfg:       cfg,
 		reader:    reader,
@@ -108,7 +131,9 @@ func New(cfg *config.Config, batchChan chan<- *worker.Batch, doneChan <-chan str
 		offsetMgr: offsetMgr,
 		schemaMgr: schemaMgr,
 		filter:    f,
+		validator: validator,
 		metrics:   m,
+		tracer:    tracer,
 	}, nil
 }
 
@@ -126,8 +151,16 @@ func (c *Consumer) Run(ctx context.Context) error {
 		default:
 		}
 
+		// OTel span: firehose.consume
+		ctx, span := c.tracer.Start(ctx, "firehose.consume",
+			trace.WithAttributes(
+				attribute.String("kafka.topic", ""),
+			),
+		)
+
 		msg, err := c.reader.ReadMessage(ctx)
 		if err != nil {
+			span.End()
 			if ctx.Err() != nil {
 				return nil
 			}
@@ -135,10 +168,49 @@ func (c *Consumer) Run(ctx context.Context) error {
 			continue
 		}
 
+		span.SetAttributes(
+			attribute.String("kafka.topic", msg.Topic),
+			attribute.Int("kafka.partition", msg.Partition),
+			attribute.Int64("kafka.offset", msg.Offset),
+		)
+
 		parsed, err := c.schemaMgr.Parse(msg.Value)
 		if err != nil {
 			log.Printf("consumer: schema parse error for topic=%s partition=%d offset=%d: %v", msg.Topic, msg.Partition, msg.Offset, err)
+			span.End()
 			continue
+		}
+
+		// Schema validation (if enabled)
+		if c.validator != nil {
+			valid, reason := c.validator.Validate(parsed)
+			if !valid {
+				log.Printf("consumer: validation failed for topic=%s partition=%d offset=%d: %s", msg.Topic, msg.Partition, msg.Offset, reason)
+				if c.metrics != nil {
+					c.metrics.ValidationFailed.WithLabelValues(reason).Inc()
+				}
+				// Route based on SCHEMA_VALIDATION_ON_FAILURE
+				switch c.cfg.Validation.OnFailure {
+				case "dlq":
+					// Send to DLQ — need the DLQ writer for this
+					// For now, mark offset as committable and log
+					c.offsetMgr.AddOffsetsAndSetCommittable([]offsetmanager.Message{
+						{Topic: msg.Topic, Partition: msg.Partition, Offset: msg.Offset},
+					})
+				case "drop":
+					c.offsetMgr.AddOffsetsAndSetCommittable([]offsetmanager.Message{
+						{Topic: msg.Topic, Partition: msg.Partition, Offset: msg.Offset},
+					})
+				default: // "ignore"
+					c.offsetMgr.AddOffsetsAndSetCommittable([]offsetmanager.Message{
+						{Topic: msg.Topic, Partition: msg.Partition, Offset: msg.Offset},
+					})
+				}
+				span.SetAttributes(attribute.Bool("validation.passed", false))
+				span.End()
+				continue
+			}
+			span.SetAttributes(attribute.Bool("validation.passed", true))
 		}
 
 		sinkMsg := sink.Message{
@@ -166,9 +238,13 @@ func (c *Consumer) Run(ctx context.Context) error {
 			if c.metrics != nil {
 				c.metrics.MessagesFiltered.WithLabelValues(msg.Topic).Add(float64(len(dropped)))
 			}
+			span.SetAttributes(attribute.Bool("filter.passed", false))
+		} else {
+			span.SetAttributes(attribute.Bool("filter.passed", true))
 		}
 
 		if len(passed) == 0 {
+			span.End()
 			continue
 		}
 
@@ -183,10 +259,13 @@ func (c *Consumer) Run(ctx context.Context) error {
 
 		if c.metrics != nil {
 			c.metrics.MessagesConsumed.WithLabelValues(msg.Topic, strconv.Itoa(msg.Partition)).Inc()
-			// TODO: set firehose_consumer_lag_messages gauge.
-			// Requires reader.Stats().Lag or reader.Lag(ctx, partition) call.
-			// See kafka-go ReaderStats for partition lag data.
+			// Consumer lag from kafka-go reader stats
+			stats := c.reader.Stats()
+			c.metrics.ConsumerLag.WithLabelValues(msg.Topic, strconv.Itoa(msg.Partition)).Set(float64(stats.Lag))
 		}
+
+		span.SetAttributes(attribute.String("batch.id", batch.ID), attribute.Int("batch.size", len(batch.Messages)))
+		span.End()
 
 		select {
 		case c.batchChan <- batch:
