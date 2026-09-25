@@ -95,3 +95,39 @@ func TestErrorHandlerRouteFailCrashes(t *testing.T) {
 		t.Fatalf("expected ActionFail, got %s", action)
 	}
 }
+
+func TestErrorHandlerNetworkErrorAlwaysRetries(t *testing.T) {
+	eh := NewErrorHandler(
+		config.ParseStatusRangeList("500-599"),
+		config.ParseStatusRangeList("400-499,500-599"),
+		config.StatusRangeList{},
+	)
+
+	// Status code 0 = TCP connection error — should retry
+	msg := FailedMessage{
+		ErrorInfo: ErrorInfo{StatusCode: 0, ErrorType: ErrorTypeSinkUnknown},
+		Retried:   false,
+	}
+	action := eh.Route(msg)
+	if action != ActionRetry {
+		t.Errorf("network error (code=0) should retry, got %s", action)
+	}
+}
+
+func TestErrorHandlerNetworkErrorRetriesThenDLQ(t *testing.T) {
+	eh := NewErrorHandler(
+		config.ParseStatusRangeList("500-599"),
+		config.ParseStatusRangeList("400-499,500-599"),
+		config.StatusRangeList{},
+	)
+
+	// After retry exhausted, network error should go to DLQ (not ignore)
+	msg := FailedMessage{
+		ErrorInfo: ErrorInfo{StatusCode: 0, ErrorType: ErrorTypeSinkUnknown},
+		Retried:   true,
+	}
+	action := eh.Route(msg)
+	if action != ActionDLQ {
+		t.Errorf("network error after retry should go to DLQ, got %s", action)
+	}
+}

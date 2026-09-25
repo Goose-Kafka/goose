@@ -39,8 +39,10 @@ func NewErrorHandler(retry, dlq, fail config.StatusRangeList) *ErrorHandler {
 // Priority order mirrors the raystack firehose decorator chain:
 //  1. Fail  — highest priority; crashes the pipeline for infrastructure
 //     failures so an operator can intervene.
-//  2. Retry — only if the message has not already been retried (Retried=false)
-//     and the status code falls in a retry range.
+//  2. Retry — network errors (status code 0 = TCP/connection failures) are
+//     ALWAYS retried as they are transient. Other status codes are retried
+//     only if they match a configured retry range and the message hasn't
+//     been retried yet.
 //  3. DLQ   — messages that were not retried or whose retry is exhausted.
 //  4. Ignore — default for any status code not in a configured range.
 func (eh *ErrorHandler) Route(msg FailedMessage) Action {
@@ -51,12 +53,20 @@ func (eh *ErrorHandler) Route(msg FailedMessage) Action {
 		return ActionFail
 	}
 
+	// Network errors (status code 0) are always transient — always retry.
+	if code == 0 && !msg.Retried {
+		return ActionRetry
+	}
+
 	// Retry only if the message hasn't already been retried.
 	if !msg.Retried && eh.retryRanges.Matches(code) {
 		return ActionRetry
 	}
 
-	// Check DLQ.
+	// Check DLQ. Network errors (code 0) that exhausted retry go to DLQ too.
+	if code == 0 && eh.dlqRanges.Matches(500) {
+		return ActionDLQ
+	}
 	if eh.dlqRanges.Matches(code) {
 		return ActionDLQ
 	}
