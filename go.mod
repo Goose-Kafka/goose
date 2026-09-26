@@ -5,6 +5,7 @@ go 1.27.0
 require (
 	cel.dev/cel-go v0.32.0
 	github.com/google/uuid v1.6.0
+	github.com/lib/pq v1.12.3
 	github.com/oliveagle/jsonpath v0.1.4
 	github.com/prometheus/client_golang v1.24.1
 	github.com/segmentio/kafka-go v0.4.51
