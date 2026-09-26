@@ -3,6 +3,8 @@ package sink
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -60,17 +62,31 @@ func NewHTTPSink(cfg HTTPSinkConfig) *HTTPSink {
 	}
 }
 
-// Push delivers the given messages to the sink. In batch mode all messages are
-// sent in one request; in individual mode one request is sent per message.
-// Returns the set of messages that failed (non-2xx or transport error).
+// Push delivers the given messages to the sink. Three batch modes are
+// supported, selected by config.BatchMode:
+//   - "with_response": messages are sent in JSON-array batches injecting a
+//     _goose_seq index into each element; the endpoint returns per-message
+//     success/failure results that goose parses and maps back to individual
+//     messages.
+//   - "all_or_nothing": all messages are sent in one JSON-array POST and
+//     either all succeed or all are reported as failed.
+//   - "none" (default): individual mode — one POST per message. Used when
+//     JSONBodyTemplate is set.
 func (s *HTTPSink) Push(msgs []Message) ([]errorpkg.FailedMessage, error) {
 	if len(msgs) == 0 {
 		return nil, nil
 	}
-	if s.config.JSONBodyTemplate == "" {
+	switch s.config.BatchMode {
+	case "with_response":
+		return s.pushBatchWithResponse(msgs)
+	case "all_or_nothing":
 		return s.pushBatch(msgs)
+	default:
+		if s.config.JSONBodyTemplate == "" {
+			return s.pushBatch(msgs)
+		}
+		return s.pushIndividual(msgs)
 	}
-	return s.pushIndividual(msgs)
 }
 
 // pushBatch joins all message values into a JSON array and sends one POST.
@@ -95,6 +111,119 @@ func (s *HTTPSink) pushBatch(msgs []Message) ([]errorpkg.FailedMessage, error) {
 		return s.toFailedMessages(msgs, resp.StatusCode, "sink returned non-2xx status"), nil
 	}
 	return nil, nil
+}
+
+// pushBatchWithResponse sends messages in one or more JSON-array batches and
+// parses per-message results from the response. Each outgoing message gets a
+// _goose_seq integer index injected (so the caller's original bytes are not
+// mutated). On a non-2xx HTTP response or transport error, the whole batch is
+// treated as retryable failures. On 2xx, the response body is parsed with
+// BatchResponseParser and individual messages are routed: success → omitted
+// from failed; non-retryable failure → included with a 4xx status; retryable
+// failure → included with a 5xx status. Messages missing from the response are
+// treated as retryable failures.
+func (s *HTTPSink) pushBatchWithResponse(msgs []Message) ([]errorpkg.FailedMessage, error) {
+	s.connTrack.evictStale()
+
+	maxSize := s.config.BatchMaxSize
+	if maxSize <= 0 {
+		maxSize = len(msgs)
+	}
+
+	parser := NewBatchResponseParser(s.config)
+	var failed []errorpkg.FailedMessage
+
+	for start := 0; start < len(msgs); start += maxSize {
+		end := start + maxSize
+		if end > len(msgs) {
+			end = len(msgs)
+		}
+		chunk := msgs[start:end]
+
+		body, err := s.buildBatchWithSeqBody(chunk)
+		if err != nil {
+			failed = append(failed, s.toFailedMessages(chunk, 0,
+				fmt.Sprintf("build batch body: %v", err))...)
+			continue
+		}
+
+		req, err := http.NewRequest(s.config.RequestMethod, s.config.ServiceURL, bytes.NewReader(body))
+		if err != nil {
+			failed = append(failed, s.toFailedMessages(chunk, 0, err.Error())...)
+			continue
+		}
+		s.setHeaders(req)
+
+		resp, err := s.client.Do(req)
+		if err != nil {
+			failed = append(failed, s.toFailedMessages(chunk, 0, err.Error())...)
+			continue
+		}
+
+		respBody, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			// Non-2xx → whole batch retries (all-or-nothing fallback).
+			failed = append(failed, s.toFailedMessages(chunk, resp.StatusCode,
+				"batch endpoint returned non-2xx status")...)
+			continue
+		}
+
+		if readErr != nil {
+			failed = append(failed, s.toFailedMessages(chunk, 0,
+				fmt.Sprintf("read batch response: %v", readErr))...)
+			continue
+		}
+
+		results, parseErr := parser.Parse(respBody, len(chunk))
+		if parseErr != nil {
+			// Cannot parse per-message results → treat the whole batch as
+			// retryable so nothing is silently dropped.
+			failed = append(failed, s.toFailedMessages(chunk, resp.StatusCode,
+				fmt.Sprintf("parse batch response: %v", parseErr))...)
+			continue
+		}
+
+		for i, msg := range chunk {
+			r := results[i]
+			if r.Success {
+				continue
+			}
+			statusCode := 500
+			if !r.IsRetryable {
+				statusCode = 422
+			}
+			fm := s.toFailedMessages([]Message{msg}, statusCode, r.Error)[0]
+			failed = append(failed, fm)
+		}
+	}
+
+	return failed, nil
+}
+
+// buildBatchWithSeqBody unmarshals each message value, injects a _goose_seq
+// index, and marshals the augmented values as a JSON array. The original
+// Message.Value bytes are never mutated.
+func (s *HTTPSink) buildBatchWithSeqBody(msgs []Message) ([]byte, error) {
+	seqField := s.config.BatchSeqField
+	if seqField == "" {
+		seqField = "_goose_seq"
+	}
+	items := make([]json.RawMessage, len(msgs))
+	for i, msg := range msgs {
+		var obj map[string]interface{}
+		if err := json.Unmarshal(msg.Value, &obj); err != nil {
+			return nil, fmt.Errorf("message %d is not valid JSON: %w", i, err)
+		}
+		obj[seqField] = i
+		augmented, err := json.Marshal(obj)
+		if err != nil {
+			return nil, fmt.Errorf("marshal message %d: %w", i, err)
+		}
+		items[i] = augmented
+	}
+	return json.Marshal(items)
 }
 
 // pushIndividual sends one POST per message, using the message Value as body.

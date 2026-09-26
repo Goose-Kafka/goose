@@ -85,8 +85,27 @@ func main() {
 		Headers:              headersToString(cfg.HTTP.Headers),
 		JSONBodyTemplate:     cfg.HTTP.JSONBodyTemplate,
 		DataFormat:           cfg.HTTP.DataFormat,
+		BatchMode:            cfg.HTTP.BatchMode,
+		BatchMaxSize:         cfg.HTTP.BatchMaxSize,
+		BatchSeqField:        cfg.HTTP.BatchSeqField,
+		BatchRespPath:        cfg.HTTP.BatchRespPath,
+		BatchRespSeqField:    cfg.HTTP.BatchRespSeqField,
+		BatchRespStatusField: cfg.HTTP.BatchRespStatusField,
+		BatchRespErrorField:  cfg.HTTP.BatchRespErrorField,
+		BatchRespRetryFlag:   cfg.HTTP.BatchRespRetryFlag,
+		BatchRespSuccessVal:  cfg.HTTP.BatchRespSuccessVal,
 	})
 	defer httpSink.Close()
+
+	// 7a. Select the process sink based on SinkType. Currently only "http" is
+	// implemented; any other value falls back to the HTTP sink.
+	var processSink sink.Sink
+	switch cfg.SinkType {
+	case "http":
+		processSink = httpSink
+	default:
+		processSink = httpSink
+	}
 
 	// 8. Create error handler, exponential backoff, and circuit breaker.
 	errorHandler := errorpkg.NewErrorHandler(
@@ -124,7 +143,7 @@ func main() {
 		wg.Add(1)
 		w := worker.NewWorker(
 			i,
-			httpSink,
+			processSink,
 			errorHandler,
 			backoff,
 			circuitBreaker,

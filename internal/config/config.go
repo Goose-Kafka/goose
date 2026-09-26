@@ -16,6 +16,7 @@ type Config struct {
 	Validation ValidationConfig
 	Metrics    MetricsConfig
 	Tracing    TracingConfig
+	SinkType   string // "http" or "mongodb" (future)
 }
 
 // KafkaConfig holds source Kafka consumer settings.
@@ -68,6 +69,15 @@ type HTTPConfig struct {
 	OAuth2Scope                    string
 	FilterEnabled                  bool
 	FilterJSONPath                 string
+	BatchMode                      string // "none" (individual), "all_or_nothing", "with_response"
+	BatchMaxSize                   int    // max messages per batch POST (default 500)
+	BatchSeqField                  string // field name goose adds to identify messages (default "_goose_seq")
+	BatchRespPath                  string // JSON path to results array in response (default "results")
+	BatchRespSeqField              string // field name for seq in response (default "seq")
+	BatchRespStatusField           string // field name for status (default "status")
+	BatchRespErrorField            string // field name for error (default "error")
+	BatchRespRetryFlag             string // field name for retryable flag (default "is_retryable")
+	BatchRespSuccessVal            string // value meaning success (default "success")
 }
 
 // SchemaConfig holds schema registry and input data type settings.
@@ -208,6 +218,15 @@ func Load() (*Config, error) {
 			OAuth2Scope:                    getEnv("SINK_HTTP_OAUTH2_SCOPE", ""),
 			FilterEnabled:                  getEnvBool("SINK_HTTP_FILTER_ENABLED", false),
 			FilterJSONPath:                 getEnv("SINK_HTTP_FILTER_JSONPATH", ""),
+			BatchMode:                      getEnv("SINK_HTTP_BATCH_MODE", "none"),
+			BatchMaxSize:                   getEnvInt("SINK_HTTP_BATCH_MAX_SIZE", 500),
+			BatchSeqField:                  getEnv("SINK_HTTP_BATCH_SEQ_FIELD", "_goose_seq"),
+			BatchRespPath:                  getEnv("SINK_HTTP_BATCH_RESPONSE_PATH", "results"),
+			BatchRespSeqField:              getEnv("SINK_HTTP_BATCH_RESPONSE_SEQ_FIELD", "seq"),
+			BatchRespStatusField:           getEnv("SINK_HTTP_BATCH_RESPONSE_STATUS_FIELD", "status"),
+			BatchRespErrorField:            getEnv("SINK_HTTP_BATCH_RESPONSE_ERROR_FIELD", "error"),
+			BatchRespRetryFlag:             getEnv("SINK_HTTP_BATCH_RESPONSE_RETRY_FLAG", "is_retryable"),
+			BatchRespSuccessVal:            getEnv("SINK_HTTP_BATCH_RESPONSE_SUCCESS_VALUE", "success"),
 		},
 		Schema: SchemaConfig{
 			InputSchemaDataType:      getEnv("INPUT_SCHEMA_DATA_TYPE", "json"),
@@ -233,6 +252,7 @@ func Load() (*Config, error) {
 			OTLPEndpoint: getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
 			ServiceName:  getEnv("OTEL_SERVICE_NAME", "goose"),
 		},
+		SinkType: getEnv("SINK_TYPE", "http"),
 	}
 
 	if err := cfg.Validate(); err != nil {

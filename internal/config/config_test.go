@@ -109,6 +109,36 @@ func TestLoadConfigDefaults(t *testing.T) {
 	if cfg.HTTP.RequestMethod != "POST" {
 		t.Errorf("HTTP.RequestMethod = %q, want %q", cfg.HTTP.RequestMethod, "POST")
 	}
+	if cfg.HTTP.BatchMode != "none" {
+		t.Errorf("HTTP.BatchMode = %q, want %q", cfg.HTTP.BatchMode, "none")
+	}
+	if cfg.HTTP.BatchMaxSize != 500 {
+		t.Errorf("HTTP.BatchMaxSize = %d, want 500", cfg.HTTP.BatchMaxSize)
+	}
+	if cfg.HTTP.BatchSeqField != "_goose_seq" {
+		t.Errorf("HTTP.BatchSeqField = %q, want %q", cfg.HTTP.BatchSeqField, "_goose_seq")
+	}
+	if cfg.HTTP.BatchRespPath != "results" {
+		t.Errorf("HTTP.BatchRespPath = %q, want %q", cfg.HTTP.BatchRespPath, "results")
+	}
+	if cfg.HTTP.BatchRespSeqField != "seq" {
+		t.Errorf("HTTP.BatchRespSeqField = %q, want %q", cfg.HTTP.BatchRespSeqField, "seq")
+	}
+	if cfg.HTTP.BatchRespStatusField != "status" {
+		t.Errorf("HTTP.BatchRespStatusField = %q, want %q", cfg.HTTP.BatchRespStatusField, "status")
+	}
+	if cfg.HTTP.BatchRespErrorField != "error" {
+		t.Errorf("HTTP.BatchRespErrorField = %q, want %q", cfg.HTTP.BatchRespErrorField, "error")
+	}
+	if cfg.HTTP.BatchRespRetryFlag != "is_retryable" {
+		t.Errorf("HTTP.BatchRespRetryFlag = %q, want %q", cfg.HTTP.BatchRespRetryFlag, "is_retryable")
+	}
+	if cfg.HTTP.BatchRespSuccessVal != "success" {
+		t.Errorf("HTTP.BatchRespSuccessVal = %q, want %q", cfg.HTTP.BatchRespSuccessVal, "success")
+	}
+	if cfg.SinkType != "http" {
+		t.Errorf("SinkType = %q, want %q", cfg.SinkType, "http")
+	}
 }
 
 func TestLoadConfigFromEnv(t *testing.T) {
@@ -142,6 +172,59 @@ func TestLoadConfigFromEnv(t *testing.T) {
 	}
 	if cfg.HTTP.RequestMethod != "PUT" {
 		t.Errorf("HTTP.RequestMethod = %q, want %q", cfg.HTTP.RequestMethod, "PUT")
+	}
+}
+
+func TestLoadConfigBatchFieldsFromEnv(t *testing.T) {
+	t.Setenv("SOURCE_KAFKA_BROKERS", "localhost:9092")
+	t.Setenv("SOURCE_KAFKA_TOPIC", "test-events")
+	t.Setenv("SOURCE_KAFKA_CONSUMER_GROUP_ID", "test-group")
+	t.Setenv("SINK_HTTP_SERVICE_URL", "http://test:8080/api")
+	t.Setenv("SINK_HTTP_DLQ_KAFKA_BROKERS", "localhost:9092")
+	t.Setenv("SINK_HTTP_BATCH_MODE", "with_response")
+	t.Setenv("SINK_HTTP_BATCH_MAX_SIZE", "100")
+	t.Setenv("SINK_HTTP_BATCH_SEQ_FIELD", "_custom_seq")
+	t.Setenv("SINK_HTTP_BATCH_RESPONSE_PATH", "responses")
+	t.Setenv("SINK_HTTP_BATCH_RESPONSE_SEQ_FIELD", "idx")
+	t.Setenv("SINK_HTTP_BATCH_RESPONSE_STATUS_FIELD", "result")
+	t.Setenv("SINK_HTTP_BATCH_RESPONSE_ERROR_FIELD", "err")
+	t.Setenv("SINK_HTTP_BATCH_RESPONSE_RETRY_FLAG", "retry")
+	t.Setenv("SINK_HTTP_BATCH_RESPONSE_SUCCESS_VALUE", "ok")
+	t.Setenv("SINK_TYPE", "http")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() returned error: %v", err)
+	}
+	if cfg.HTTP.BatchMode != "with_response" {
+		t.Errorf("BatchMode = %q, want %q", cfg.HTTP.BatchMode, "with_response")
+	}
+	if cfg.HTTP.BatchMaxSize != 100 {
+		t.Errorf("BatchMaxSize = %d, want 100", cfg.HTTP.BatchMaxSize)
+	}
+	if cfg.HTTP.BatchSeqField != "_custom_seq" {
+		t.Errorf("BatchSeqField = %q, want %q", cfg.HTTP.BatchSeqField, "_custom_seq")
+	}
+	if cfg.HTTP.BatchRespPath != "responses" {
+		t.Errorf("BatchRespPath = %q, want %q", cfg.HTTP.BatchRespPath, "responses")
+	}
+	if cfg.HTTP.BatchRespSeqField != "idx" {
+		t.Errorf("BatchRespSeqField = %q, want %q", cfg.HTTP.BatchRespSeqField, "idx")
+	}
+	if cfg.HTTP.BatchRespStatusField != "result" {
+		t.Errorf("BatchRespStatusField = %q, want %q", cfg.HTTP.BatchRespStatusField, "result")
+	}
+	if cfg.HTTP.BatchRespErrorField != "err" {
+		t.Errorf("BatchRespErrorField = %q, want %q", cfg.HTTP.BatchRespErrorField, "err")
+	}
+	if cfg.HTTP.BatchRespRetryFlag != "retry" {
+		t.Errorf("BatchRespRetryFlag = %q, want %q", cfg.HTTP.BatchRespRetryFlag, "retry")
+	}
+	if cfg.HTTP.BatchRespSuccessVal != "ok" {
+		t.Errorf("BatchRespSuccessVal = %q, want %q", cfg.HTTP.BatchRespSuccessVal, "ok")
+	}
+	if cfg.SinkType != "http" {
+		t.Errorf("SinkType = %q, want %q", cfg.SinkType, "http")
 	}
 }
 
