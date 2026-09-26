@@ -116,14 +116,14 @@ jobs:
 
       - name: Test Docker image runs
         run: |
-          docker run --rm goose:latest --help 2>&1 || true
-          # Goose doesn't have --help, so it will try to start and fail on missing config
-          # Just verify it doesn't crash immediately
-          docker run --rm -e SOURCE_KAFKA_BROKERS=localhost:9092 \
-                     -e SOURCE_KAFKA_TOPIC=test \
-                     -e SINK_HTTP_SERVICE_URL=http://localhost:8080/api \
-                     --entrypoint /bin/sh \
-                     goose:latest -c "ls /goose && echo 'binary exists'"
+          # Verify the binary exists in the distroless image
+          # (distroless has no shell, so we can't use /bin/sh)
+          # Copy the binary out and check it
+          docker create --name goose-test goose:latest
+          docker cp goose-test:/goose /tmp/goose-test
+          docker rm goose-test
+          ls -lh /tmp/goose-test
+          echo "✓ Binary exists in Docker image"
 
   helm:
     name: Helm Chart Validation

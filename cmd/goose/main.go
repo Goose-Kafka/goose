@@ -56,7 +56,13 @@ func main() {
 			metricsMux.Handle("/metrics", m.Handler())
 			addr := fmt.Sprintf(":%d", cfg.Metrics.PrometheusPort)
 			log.Printf("metrics server listening on %s", addr)
-			if err := http.ListenAndServe(addr, metricsMux); err != nil {
+			metricsServer := &http.Server{
+				Addr:         addr,
+				Handler:      metricsMux,
+				ReadTimeout:  10 * time.Second,
+				WriteTimeout: 10 * time.Second,
+			}
+			if err := metricsServer.ListenAndServe(); err != nil {
 				log.Printf("metrics server error: %v", err)
 			}
 		}()
