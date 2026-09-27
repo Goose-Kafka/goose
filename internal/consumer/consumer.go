@@ -137,12 +137,18 @@ func New(cfg *config.Config, batchChan chan<- *worker.Batch, doneChan <-chan str
 	}, nil
 }
 
-// Run is the consumer's main poll loop. It reads messages from Kafka,
-// deserializes, filters, creates batches, and dispatches them to the worker
-// pool. The loop exits when the context is cancelled.
+// Run is the consumer's main poll loop. It reads messages from Kafka in batches
+// (up to MAX_POLL_RECORDS per batch using FetchMessage), deserializes, validates,
+// filters, creates batches, and dispatches them to the worker pool.
+// The loop exits when the context is cancelled.
 func (c *Consumer) Run(ctx context.Context) error {
 	defer c.reader.Close()
 	defer c.schemaMgr.Close()
+
+	maxPollRecords := c.cfg.Kafka.MaxPollRecords
+	if maxPollRecords <= 0 {
+		maxPollRecords = 100
+	}
 
 	for {
 		select {
@@ -151,121 +157,129 @@ func (c *Consumer) Run(ctx context.Context) error {
 		default:
 		}
 
-		// OTel span: firehose.consume
-		ctx, span := c.tracer.Start(ctx, "firehose.consume",
-			trace.WithAttributes(
-				attribute.String("kafka.topic", ""),
-			),
-		)
-
-		msg, err := c.reader.ReadMessage(ctx)
-		if err != nil {
-			span.End()
-			if ctx.Err() != nil {
-				return nil
+		// Batch-poll: fetch up to maxPollRecords messages in one poll cycle
+		var kafkaMsgs []kafka.Message
+		for i := 0; i < maxPollRecords; i++ {
+			msg, err := c.reader.FetchMessage(ctx)
+			if err != nil {
+				if ctx.Err() != nil && len(kafkaMsgs) > 0 {
+					// Context cancelled but we have messages — process them
+					break
+				}
+				if ctx.Err() != nil {
+					return nil
+				}
+				if len(kafkaMsgs) > 0 {
+					// We have some messages — process them, log the error
+					log.Printf("consumer: fetch error after %d messages: %v", len(kafkaMsgs), err)
+					break
+				}
+				// No messages yet — just a poll timeout, continue
+				log.Printf("consumer: read error: %v", err)
+				break
 			}
-			log.Printf("consumer: read error: %v", err)
+			kafkaMsgs = append(kafkaMsgs, msg)
+		}
+
+		if len(kafkaMsgs) == 0 {
 			continue
 		}
 
-		span.SetAttributes(
-			attribute.String("kafka.topic", msg.Topic),
-			attribute.Int("kafka.partition", msg.Partition),
-			attribute.Int64("kafka.offset", msg.Offset),
-		)
+		// Process each fetched message
+		var passedMsgs []filter.Message
+		for _, msg := range kafkaMsgs {
+			// OTel span: firehose.consume
+			_, span := c.tracer.Start(ctx, "firehose.consume",
+				trace.WithAttributes(
+					attribute.String("kafka.topic", msg.Topic),
+					attribute.Int("kafka.partition", msg.Partition),
+					attribute.Int64("kafka.offset", msg.Offset),
+				),
+			)
 
-		parsed, err := c.schemaMgr.Parse(msg.Value)
-		if err != nil {
-			log.Printf("consumer: schema parse error for topic=%s partition=%d offset=%d: %v", msg.Topic, msg.Partition, msg.Offset, err)
-			span.End()
-			continue
-		}
-
-		// Schema validation (if enabled)
-		if c.validator != nil {
-			valid, reason := c.validator.Validate(parsed)
-			if !valid {
-				log.Printf("consumer: validation failed for topic=%s partition=%d offset=%d: %s", msg.Topic, msg.Partition, msg.Offset, reason)
-				if c.metrics != nil {
-					c.metrics.ValidationFailed.WithLabelValues(reason).Inc()
-				}
-				// Route based on SCHEMA_VALIDATION_ON_FAILURE
-				switch c.cfg.Validation.OnFailure {
-				case "dlq":
-					// Send to DLQ — need the DLQ writer for this
-					// For now, mark offset as committable and log
-					c.offsetMgr.AddOffsetsAndSetCommittable([]offsetmanager.Message{
-						{Topic: msg.Topic, Partition: msg.Partition, Offset: msg.Offset},
-					})
-				case "drop":
-					c.offsetMgr.AddOffsetsAndSetCommittable([]offsetmanager.Message{
-						{Topic: msg.Topic, Partition: msg.Partition, Offset: msg.Offset},
-					})
-				default: // "ignore"
-					c.offsetMgr.AddOffsetsAndSetCommittable([]offsetmanager.Message{
-						{Topic: msg.Topic, Partition: msg.Partition, Offset: msg.Offset},
-					})
-				}
-				span.SetAttributes(attribute.Bool("validation.passed", false))
+			parsed, err := c.schemaMgr.Parse(msg.Value)
+			if err != nil {
+				log.Printf("consumer: schema parse error for topic=%s partition=%d offset=%d: %v", msg.Topic, msg.Partition, msg.Offset, err)
 				span.End()
 				continue
 			}
-			span.SetAttributes(attribute.Bool("validation.passed", true))
-		}
 
-		sinkMsg := sink.Message{
-			Topic:     msg.Topic,
-			Partition: msg.Partition,
-			Offset:    msg.Offset,
-			Key:       msg.Key,
-			Value:     parsed,
-		}
-
-		filterMsg := filter.Message{
-			Topic:     sinkMsg.Topic,
-			Partition: sinkMsg.Partition,
-			Offset:    sinkMsg.Offset,
-			Key:       sinkMsg.Key,
-			Value:     sinkMsg.Value,
-		}
-
-		passed, dropped := c.filter.Apply([]filter.Message{filterMsg})
-
-		if len(dropped) > 0 {
-			if c.offsetMgr != nil {
-				c.offsetMgr.AddOffsetsAndSetCommittable(toOffsetMessages(dropped))
+			// Schema validation (if enabled)
+			if c.validator != nil {
+				valid, reason := c.validator.Validate(parsed)
+				if !valid {
+					log.Printf("consumer: validation failed for topic=%s partition=%d offset=%d: %s", msg.Topic, msg.Partition, msg.Offset, reason)
+					if c.metrics != nil {
+						c.metrics.ValidationFailed.WithLabelValues(reason).Inc()
+					}
+					c.offsetMgr.AddOffsetsAndSetCommittable([]offsetmanager.Message{
+						{Topic: msg.Topic, Partition: msg.Partition, Offset: msg.Offset},
+					})
+					span.SetAttributes(attribute.Bool("validation.passed", false))
+					span.End()
+					continue
+				}
+				span.SetAttributes(attribute.Bool("validation.passed", true))
 			}
-			if c.metrics != nil {
-				c.metrics.MessagesFiltered.WithLabelValues(msg.Topic).Add(float64(len(dropped)))
-			}
-			span.SetAttributes(attribute.Bool("filter.passed", false))
-		} else {
-			span.SetAttributes(attribute.Bool("filter.passed", true))
-		}
 
-		if len(passed) == 0 {
+			filterMsg := filter.Message{
+				Topic:     msg.Topic,
+				Partition: msg.Partition,
+				Offset:    msg.Offset,
+				Key:       msg.Key,
+				Value:     parsed,
+			}
+
+			passed, dropped := c.filter.Apply([]filter.Message{filterMsg})
+
+			if len(dropped) > 0 {
+				if c.offsetMgr != nil {
+					c.offsetMgr.AddOffsetsAndSetCommittable(toOffsetMessages(dropped))
+				}
+				if c.metrics != nil {
+					c.metrics.MessagesFiltered.WithLabelValues(msg.Topic).Add(float64(len(dropped)))
+				}
+				span.SetAttributes(attribute.Bool("filter.passed", false))
+			} else {
+				span.SetAttributes(attribute.Bool("filter.passed", true))
+			}
+
 			span.End()
+
+			passedMsgs = append(passedMsgs, passed...)
+		}
+
+		if len(passedMsgs) == 0 {
 			continue
 		}
 
+		// Create a single batch with all passed messages from this poll cycle
 		batch := &worker.Batch{
 			ID:       uuid.NewString(),
-			Messages: toSinkMessages(passed),
+			Messages: toSinkMessages(passedMsgs),
 		}
 
 		if c.offsetMgr != nil {
-			c.offsetMgr.AddBatch(batch.ID, toOffsetMessages(passed))
+			c.offsetMgr.AddBatch(batch.ID, toOffsetMessages(passedMsgs))
 		}
 
 		if c.metrics != nil {
-			c.metrics.MessagesConsumed.WithLabelValues(msg.Topic, strconv.Itoa(msg.Partition)).Inc()
+			for _, pm := range passedMsgs {
+				c.metrics.MessagesConsumed.WithLabelValues(pm.Topic, strconv.Itoa(pm.Partition)).Inc()
+			}
 			// Consumer lag from kafka-go reader stats
 			stats := c.reader.Stats()
-			c.metrics.ConsumerLag.WithLabelValues(msg.Topic, strconv.Itoa(msg.Partition)).Set(float64(stats.Lag))
+			c.metrics.ConsumerLag.WithLabelValues(kafkaMsgs[0].Topic, strconv.Itoa(kafkaMsgs[0].Partition)).Set(float64(stats.Lag))
 		}
 
-		span.SetAttributes(attribute.String("batch.id", batch.ID), attribute.Int("batch.size", len(batch.Messages)))
-		span.End()
+		// Set OTel attributes for the batch
+		_, batchSpan := c.tracer.Start(ctx, "firehose.dispatch_batch",
+			trace.WithAttributes(
+				attribute.String("batch.id", batch.ID),
+				attribute.Int("batch.size", len(batch.Messages)),
+			),
+		)
+		batchSpan.End()
 
 		select {
 		case c.batchChan <- batch:
