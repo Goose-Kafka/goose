@@ -1,0 +1,37 @@
+---
+title: Redis Sink
+description: Redis sink configuration
+---
+
+# Redis Sink
+
+| Env Var | Default | Description |
+|---------|---------|-------------|
+| `SINK_TYPE` | `http` | Set to `redis` |
+| `SINK_REDIS_ADDRESSES` | _(required)_ | Comma-separated Redis addresses |
+| `SINK_REDIS_PASSWORD` | _(empty)_ | Redis password |
+| `SINK_REDIS_DATABASE` | `0` | Redis database number |
+| `SINK_REDIS_DATA_TYPE` | `keyvalue` | `keyvalue`, `hashset`, or `list` |
+| `SINK_REDIS_KEY_TEMPLATE` | _(empty)_ | Key template (e.g., `payment:%s`) |
+| `SINK_REDIS_KEY_FIELD` | _(empty)_ | JSON field to extract key value from |
+| `SINK_REDIS_HASH_FIELD` | `(empty)` | Hash field name (for hashset mode) |
+| `SINK_REDIS_DEPLOYMENT_TYPE` | `standalone` | `standalone` or `cluster` |
+| `SINK_REDIS_TTL_TYPE` | `DISABLE` | `DISABLE` or `EX` |
+| `SINK_REDIS_TTL_VALUE` | `0` | TTL in seconds |
+
+## Data Types
+
+| Type | Redis Command | Example |
+|------|--------------|---------|
+| `keyvalue` | `SET key value [EX ttl]` | `SET payment:PAY-001 {"amount":500}` |
+| `hashset` | `HSET key field value` | `HSET payment:PAY-001 data {"amount":500}` |
+| `list` | `LPUSH key value` | `LPUSH payments {"amount":500}` |
+
+## Key Templating
+
+```properties
+SINK_REDIS_KEY_TEMPLATE=payment:%s
+SINK_REDIS_KEY_FIELD=payment_id
+# Message: {"payment_id":"PAY-001","amount":500}
+# Key: payment:PAY-001
+```

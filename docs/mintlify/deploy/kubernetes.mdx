@@ -1,0 +1,60 @@
+---
+title: Kubernetes
+description: Deploying Goose on Kubernetes with Helm
+---
+
+# Kubernetes
+
+## Helm Install
+
+```bash
+helm install goose ./helm \
+  --set env.SOURCE_KAFKA_BROKERS=kafka:9092 \
+  --set env.SOURCE_KAFKA_TOPIC=events \
+  --set env.SOURCE_KAFKA_CONSUMER_GROUP_ID=goose \
+  --set env.SINK_HTTP_SERVICE_URL=http://service:8080/api
+```
+
+## values.yaml
+
+```yaml
+image:
+  repository: ghcr.io/goose-kafka/goose
+  tag: latest
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+env:
+  SOURCE_KAFKA_BROKERS: kafka:9092
+  SOURCE_KAFKA_TOPIC: events
+  SOURCE_KAFKA_CONSUMER_GROUP_ID: goose
+  SINK_HTTP_SERVICE_URL: http://service:8080/api
+  SINK_WORKER_POOL_SIZE: "50"
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 128Mi
+```
+
+## Resources
+
+The Helm chart creates:
+
+| Resource | Description |
+|----------|-------------|
+| `Deployment` | Goose pods |
+| `Service` | Metrics service (port 9090) for Prometheus |
+| `ConfigMap` | Environment variables |
+
+## Scaling
+
+Scale by increasing `replicaCount` (capped by Kafka partitions):
+
+```bash
+helm upgrade goose ./helm --set replicaCount=4
+```

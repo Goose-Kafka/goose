@@ -1,0 +1,40 @@
+---
+title: HTTP Sink
+description: HTTP REST sink configuration
+---
+
+# HTTP Sink
+
+| Env Var | Default | Description |
+|---------|---------|-------------|
+| `SINK_TYPE` | `http` | Set to `http` |
+| `SINK_HTTP_SERVICE_URL` | _(required)_ | HTTP endpoint URL |
+| `SINK_HTTP_REQUEST_METHOD` | `POST` | HTTP method |
+| `SINK_HTTP_REQUEST_TIMEOUT_MS` | `10000` | Call timeout |
+| `SINK_HTTP_MAX_CONNECTIONS` | `50` | Max pooled connections (auto-matched) |
+| `SINK_HTTP_CONNECTION_TTL_MS` | `30000` | Connection max age |
+| `SINK_HTTP_CONNECTION_IDLE_EVICT_MS` | `30000` | Idle eviction timeout |
+| `SINK_HTTP_CONNECTION_VALIDATE_INACTIVITY_MS` | `2000` | Stale validation |
+| `SINK_HTTP_HEADERS` | _(empty)_ | Comma-separated `Key:Value` |
+| `SINK_HTTP_DATA_FORMAT` | `json` | `json` or `protobuf` |
+| `SINK_HTTP_JSON_BODY_TEMPLATE` | _(empty)_ | If set → individual mode |
+
+## Three Modes
+
+| Mode | Config | Behavior |
+|------|--------|----------|
+| Individual | `BATCH_MODE=none` (default) | One POST per message |
+| All-or-nothing | `BATCH_MODE=all_or_nothing` | All messages in one POST, all retry on failure |
+| Batch-with-response | `BATCH_MODE=with_response` | Batch POST with per-message results |
+
+## Batch-with-Response Config
+
+| Env Var | Default | Description |
+|---------|---------|-------------|
+| `SINK_HTTP_BATCH_MODE` | `none` | Mode selection |
+| `SINK_HTTP_BATCH_MAX_SIZE` | `500` | Max messages per batch |
+| `SINK_HTTP_BATCH_SEQ_FIELD` | `_goose_seq` | Sequence field name |
+| `SINK_HTTP_BATCH_RESPONSE_PATH` | `results` | JSON path to results array |
+| `SINK_HTTP_BATCH_RESPONSE_STATUS_FIELD` | `status` | Status field name |
+| `SINK_HTTP_BATCH_RESPONSE_RETRY_FLAG` | `is_retryable` | Retryable field name |
+| `SINK_HTTP_BATCH_RESPONSE_SUCCESS_VALUE` | `success` | Success value |

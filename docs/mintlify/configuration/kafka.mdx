@@ -1,0 +1,30 @@
+---
+title: Kafka Consumer
+description: Kafka consumer configuration
+---
+
+# Kafka Consumer
+
+| Env Var | Default | Description |
+|---------|---------|-------------|
+| `SOURCE_KAFKA_BROKERS` | _(required)_ | Comma-separated Kafka brokers |
+| `SOURCE_KAFKA_TOPIC` | _(required)_ | Kafka topic to consume |
+| `SOURCE_KAFKA_CONSUMER_GROUP_ID` | _(required)_ | Consumer group ID |
+| `SOURCE_KAFKA_CONSUMER_CONFIG_MAX_POLL_RECORDS` | `500` | Max messages returned per poll cycle |
+| `SOURCE_KAFKA_POLL_TIMEOUT_MS` | `1000` | How long poll blocks for data |
+| `SOURCE_KAFKA_CONSUMER_CONFIG_MAX_POLL_INTERVAL_MS` | `300000` | Max time between polls (5 min) before Kafka evicts consumer |
+| `SOURCE_KAFKA_CONSUMER_CONFIG_SESSION_TIMEOUT_MS` | `10000` | Heartbeat timeout |
+| `SOURCE_KAFKA_CONSUMER_CONFIG_AUTO_OFFSET_RESET` | `latest` | `latest` or `earliest` |
+| `SOURCE_KAFKA_COMMIT_INTERVAL_MS` | `5000` | How often to commit offsets to Kafka |
+
+## Batch-Poll Consumer
+
+Goose uses `FetchMessage` in a loop to poll up to `MAX_POLL_RECORDS` messages per cycle. All passed messages from one poll cycle are grouped into a single batch and sent to the worker pool.
+
+<Info>
+The `MAX_POLL_INTERVAL_MS` (default 5 minutes) is critical. If processing takes longer than this, Kafka evicts the consumer. Keep `MAX_POLL_RECORDS × HTTP_latency < MAX_POLL_INTERVAL_MS`.
+</Info>
+
+## Consumer Groups
+
+Multiple goose pods with the same `SOURCE_KAFKA_CONSUMER_GROUP_ID` share partitions automatically. Different group IDs = independent consumption (each group reads all messages).

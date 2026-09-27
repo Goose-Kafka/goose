@@ -1,0 +1,38 @@
+---
+title: Metrics
+description: Prometheus metrics reference
+---
+
+# Prometheus Metrics
+
+Goose exposes 15 Prometheus metrics on `/metrics` (port `METRICS_PROMETHEUS_PORT`, default 9090).
+
+## Counters
+
+| Metric | Labels | Description |
+|--------|--------|-------------|
+| `firehose_messages_consumed_total` | topic, partition | Messages consumed from Kafka |
+| `firehose_messages_filtered_total` | topic | Messages dropped by filter |
+| `firehose_messages_delivered_total` | sink | Messages delivered to sink |
+| `firehose_messages_retried_total` | error_type | Messages that entered retry |
+| `firehose_messages_dlq_total` | error_type | Messages sent to DLQ |
+| `firehose_messages_ignored_total` | error_type | Messages dropped (no DLQ) |
+| `firehose_messages_validation_failed_total` | reason | Messages that failed validation |
+| `firehose_http_response_code_total` | status_code | HTTP response code distribution |
+| `firehose_offset_commit_total` | topic, partition | Offset commits to Kafka |
+| `firehose_schema_updates_total` | proto_class | Schema registry updates |
+
+## Histograms
+
+| Metric | Labels | Description |
+|--------|--------|-------------|
+| `firehose_sink_latency_seconds` | sink | Sink call latency with p50/p95/p99 buckets |
+
+## Gauges
+
+| Metric | Labels | Description |
+|--------|--------|-------------|
+| `firehose_consumer_lag_messages` | topic, partition | Kafka consumer lag |
+| `firehose_worker_pool_queue_depth` | — | Batch channel buffer depth |
+| `firehose_worker_pool_size` | — | Configured worker count |
+| `firehose_circuit_breaker_open` | sink | Circuit breaker state (1=open, 0=closed) |

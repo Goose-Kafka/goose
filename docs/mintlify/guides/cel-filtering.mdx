@@ -1,0 +1,31 @@
+---
+title: CEL Filtering
+description: CEL expression filtering guide
+---
+
+# CEL Filtering Guide
+
+## Engine Detection
+
+- Expression starts with `$` → JSONPath
+- Any other expression → CEL
+
+## CEL Capabilities
+
+| Capability | Example |
+|-----------|---------|
+| Equality | `message.status == "created"` |
+| Inequality | `message.status != "cancelled"` |
+| Comparison | `message.amount > 100` |
+| AND | `message.status == "created" && message.amount > 100` |
+| OR | `message.status == "created" \|\| message.status == "pending"` |
+| IN | `message.city in ["Mumbai", "Delhi"]` |
+| has() | `has(message.customer_id)` |
+| startsWith() | `message.name.startsWith("order-")` |
+| contains() | `message.email.contains("@company.com")` |
+| size() | `message.items.size() > 0` |
+| Nested | `message.order.payment.amount > 500` |
+
+## Invalid Expression Handling
+
+If the CEL expression is invalid, goose logs a warning and falls back to `NoOpFilter` (passes all messages through).

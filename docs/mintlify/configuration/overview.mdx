@@ -1,0 +1,48 @@
+---
+title: Configuration Overview
+description: Complete environment variable reference
+---
+
+# Configuration Overview
+
+All configuration is via environment variables. Goose validates required fields at startup and fails fast if anything is missing.
+
+## Required Fields
+
+| Env Var | Description |
+|---------|-------------|
+| `SOURCE_KAFKA_BROKERS` | Comma-separated Kafka brokers |
+| `SOURCE_KAFKA_TOPIC` | Kafka topic to consume |
+| `SOURCE_KAFKA_CONSUMER_GROUP_ID` | Consumer group ID |
+| `SINK_HTTP_SERVICE_URL` | HTTP endpoint URL (when `SINK_TYPE=http`) |
+
+## All Sections
+
+| Section | Env Var Prefix | Description |
+|---------|---------------|-------------|
+| Kafka | `SOURCE_KAFKA_*` | Kafka consumer settings |
+| Worker Pool | `SINK_WORKER_*` | Worker goroutine count and buffer |
+| HTTP Sink | `SINK_HTTP_*` | HTTP endpoint, timeouts, connections |
+| gRPC Sink | `SINK_GRPC_*` | gRPC endpoint and method |
+| MongoDB Sink | `SINK_MONGO_*` | MongoDB connection and collection |
+| PostgreSQL Sink | `SINK_SQL_*` | SQL connection and table |
+| Redis Sink | `SINK_REDIS_*` | Redis addresses and data type |
+| Error Handling | `SINK_HTTP_ERROR_*` | Retry, DLQ, fail status codes |
+| Circuit Breaker | `SINK_HTTP_CIRCUIT_BREAKER_*` | Failure threshold and reset |
+| DLQ | `SINK_HTTP_DLQ_*` | Dead letter queue config |
+| Filtering | `SINK_HTTP_FILTER_*` | JSONPath or CEL expressions |
+| Schema | `INPUT_SCHEMA_*`, `SCHEMA_REGISTRY_*` | Data type and registry |
+| Validation | `SCHEMA_VALIDATION_*` | CEL validation expressions |
+| Observability | `METRICS_*`, `OTEL_*` | Metrics and tracing |
+| OAuth2 | `SINK_HTTP_OAUTH2_*` | OAuth2 authentication |
+
+## Validation Rules
+
+At startup, Goose validates:
+
+1. Required fields are non-empty
+2. `SINK_WORKER_POOL_SIZE > 0`
+3. `SINK_HTTP_MAX_CONNECTIONS > 0`
+4. `SINK_HTTP_DLQ_KAFKA_BROKERS` required when DLQ enabled
+5. `SINK_HTTP_MAX_CONNECTIONS` auto-matches `SINK_WORKER_POOL_SIZE`
+6. `SCHEMA_REGISTRY_URL` and `SCHEMA_REGISTRY_PROTO_CLASS` required when registry enabled

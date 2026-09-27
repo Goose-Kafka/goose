@@ -1,0 +1,53 @@
+---
+title: Filtering
+description: JSONPath and CEL filtering configuration
+---
+
+# Filtering
+
+| Env Var | Default | Description |
+|---------|---------|-------------|
+| `SINK_HTTP_FILTER_ENABLED` | `false` | Enable message filtering |
+| `SINK_HTTP_FILTER_JSONPATH` | _(empty)_ | Filter expression (JSONPath or CEL — auto-detected) |
+
+## Engine Selection
+
+Goose automatically selects the filter engine based on expression format:
+
+- Starts with `$` → **JSONPath** (simple field match)
+- Any other format → **CEL** (complex expressions)
+
+## JSONPath Examples
+
+```properties
+# Only forward messages where $.status equals "created"
+SINK_HTTP_FILTER_JSONPATH=$.status:created
+
+# Nested path with match value
+SINK_HTTP_FILTER_JSONPATH=$.order.status:pending
+```
+
+## CEL Examples
+
+```properties
+# AND condition
+SINK_HTTP_FILTER_JSONPATH=message.status == "created" && message.amount > 100
+
+# OR + NOT
+SINK_HTTP_FILTER_JSONPATH=message.status != "cancelled" && (message.priority == "high" || message.priority == "critical")
+
+# IN operator
+SINK_HTTP_FILTER_JSONPATH=message.city in ["Mumbai", "Delhi", "Bangalore"]
+
+# Field presence
+SINK_HTTP_FILTER_JSONPATH=has(message.customer_id)
+
+# String methods
+SINK_HTTP_FILTER_JSONPATH=message.email.contains("@company.com") && message.name.startsWith("user-")
+
+# Nested fields
+SINK_HTTP_FILTER_JSONPATH=message.order.status == "created" && message.order.payment.amount > 500
+
+# Collection size
+SINK_HTTP_FILTER_JSONPATH=message.items.size() > 0
+```

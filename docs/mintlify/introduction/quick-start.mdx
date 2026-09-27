@@ -1,0 +1,54 @@
+---
+title: Quick Start
+description: Get Goose running in under 2 minutes
+---
+
+# Quick Start
+
+## Docker
+
+```bash
+docker run -e SOURCE_KAFKA_BROKERS=kafka:9092 \
+           -e SOURCE_KAFKA_TOPIC=events \
+           -e SOURCE_KAFKA_CONSUMER_GROUP_ID=goose \
+           -e SINK_HTTP_SERVICE_URL=http://service:8080/api \
+           -e INPUT_SCHEMA_DATA_TYPE=json \
+           ghcr.io/goose-kafka/goose:latest
+```
+
+## Kubernetes (Helm)
+
+```bash
+helm install goose ./helm \
+  --set env.SOURCE_KAFKA_BROKERS=kafka:9092 \
+  --set env.SOURCE_KAFKA_TOPIC=events \
+  --set env.SINK_HTTP_SERVICE_URL=http://service:8080/api
+```
+
+## Local
+
+```sh
+git clone https://github.com/Goose-Kafka/goose.git
+cd goose
+go build -o bin/goose ./cmd/goose
+
+export SOURCE_KAFKA_BROKERS=localhost:9092
+export SOURCE_KAFKA_TOPIC=events
+export SOURCE_KAFKA_CONSUMER_GROUP_ID=goose
+export SINK_HTTP_SERVICE_URL=http://localhost:8080/api
+export INPUT_SCHEMA_DATA_TYPE=json
+./bin/goose
+```
+
+## Minimal Config
+
+Only 4 env vars are required:
+
+| Env Var | Example |
+|---------|---------|
+| `SOURCE_KAFKA_BROKERS` | `kafka:9092` |
+| `SOURCE_KAFKA_TOPIC` | `events` |
+| `SOURCE_KAFKA_CONSUMER_GROUP_ID` | `goose` |
+| `SINK_HTTP_SERVICE_URL` | `http://service:8080/api` |
+
+All other config has sensible defaults.
