@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Goose — Talk to Me, Goose</title>
+    <meta name="description" content="Lightweight Kafka-to-Sink Firehose. HTTP, gRPC, MongoDB, PostgreSQL, Redis. 33MB binary. 30MB RAM. <1s startup.">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230A0E27'/%3E%3Ctext x='32' y='44' font-family='monospace' font-size='36' font-weight='700' fill='%2338BDF8' text-anchor='middle'%3EG%3C/text%3E%3C/svg%3E">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Sora:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0A0E27;
+            --bg-light: #131830;
+            --bg-card: #161B38;
+            --border: #1E2647;
+            --text: #E2E8F0;
+            --text-dim: #64748B;
+            --text-bright: #F8FAFC;
+            --accent: #38BDF8;
+            --accent-dim: #0EA5E9;
+            --accent-glow: rgba(56, 189, 248, 0.15);
+            --green: #4ADE80;
+            --amber: #FBBF24;
+            --red: #F87171;
+            --radius: 12px;
+            --font-display: 'Sora', sans-serif;
+            --font-mono: 'Space Mono', monospace;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--font-display);
+            line-height: 1.6;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Grid background overlay */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image:
+                linear-gradient(rgba(56, 189, 248, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(56, 189, 248, 0.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Noise texture */
+        body::after {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            opacity: 0.02;
+            pointer-events: none;
+            z-index: 1;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+        }
+
+        .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 2; }
+
+        /* ===== NAVBAR ===== */
+        nav {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+            background: rgba(10, 14, 39, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            transition: all 0.3s;
+        }
+
+        nav .container {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 24px;
+        }
+
+        .logo {
+            display: flex; align-items: center; gap: 10px;
+            text-decoration: none; color: var(--text-bright);
+            font-family: var(--font-display); font-weight: 800; font-size: 20px;
+        }
+
+        .logo-mark {
+            width: 32px; height: 32px;
+            background: var(--accent); border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-family: var(--font-mono); font-weight: 700; font-size: 18px;
+            color: var(--bg);
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        .nav-links { display: flex; align-items: center; gap: 32px; }
+
+        .nav-links a {
+            color: var(--text-dim); text-decoration: none;
+            font-size: 14px; font-weight: 600;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover { color: var(--accent); }
+
+        .nav-cta {
+            background: var(--accent); color: var(--bg);
+            padding: 8px 20px; border-radius: 8px;
+            font-weight: 700; font-size: 14px;
+            text-decoration: none; transition: all 0.2s;
+        }
+
+        .nav-cta:hover { box-shadow: 0 0 24px var(--accent-glow); transform: translateY(-1px); }
+
+        /* ===== HERO ===== */
+        .hero {
+            min-height: 100vh; display: flex; align-items: center;
+            position: relative; padding: 120px 0 60px;
+        }
+
+        .hero-glow {
+            position: absolute; top: 20%; left: 50%;
+            transform: translateX(-50%);
+            width: 600px; height: 600px;
+            background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+            filter: blur(80px);
+            z-index: -1;
+        }
+
+        .hero-badge {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--bg-card); border: 1px solid var(--border);
+            padding: 6px 16px; border-radius: 100px;
+            font-family: var(--font-mono); font-size: 12px;
+            color: var(--accent);
+            margin-bottom: 28px;
+            animation: fadeInUp 0.6s ease;
+        }
+
+        .hero-badge .dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--green); box-shadow: 0 0 8px var(--green);
+            animation: pulse 2s infinite;
+        }
+
+        .hero h1 {
+            font-family: var(--font-display);
+            font-size: clamp(48px, 8vw, 96px);
+            font-weight: 800; line-height: 0.95;
+            letter-spacing: -0.03em;
+            color: var(--text-bright);
+            margin-bottom: 8px;
+            animation: fadeInUp 0.8s ease 0.1s both;
+        }
+
+        .hero h1 .accent-text {
+            color: var(--accent);
+            position: relative;
+        }
+
+        .hero-tagline {
+            font-family: var(--font-mono);
+            font-size: clamp(16px, 2vw, 20px);
+            color: var(--text-dim);
+            margin-bottom: 24px;
+            animation: fadeInUp 0.8s ease 0.2s both;
+        }
+
+        .hero-tagline::before { content: '> '; color: var(--accent); }
+
+        .hero p {
+            font-size: clamp(18px, 2.5vw, 24px);
+            color: var(--text); max-width: 600px;
+            margin-bottom: 40px;
+            animation: fadeInUp 0.8s ease 0.3s both;
+        }
+
+        .hero-actions {
+            display: flex; gap: 16px; flex-wrap: wrap;
+            animation: fadeInUp 0.8s ease 0.4s both;
+        }
+
+        .btn-primary {
+            background: var(--accent); color: var(--bg);
+            padding: 14px 32px; border-radius: var(--radius);
+            font-weight: 700; font-size: 16px;
+            text-decoration: none; display: inline-flex; align-items: center; gap: 8px;
+            transition: all 0.2s;
+        }
+
+        .btn-primary:hover { box-shadow: 0 8px 32px var(--accent-glow); transform: translateY(-2px); }
+
+        .btn-secondary {
+            background: var(--bg-card); color: var(--text);
+            border: 1px solid var(--border);
+            padding: 14px 32px; border-radius: var(--radius);
+            font-weight: 600; font-size: 16px;
+            text-decoration: none; display: inline-flex; align-items: center; gap: 8px;
+            transition: all 0.2s;
+        }
+
+        .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+        /* Hero HUD radar */
+        .hero-hud {
+            position: absolute; top: 50%; right: -100px;
+            transform: translateY(-50%);
+            width: 500px; height: 500px;
+            opacity: 0.5; z-index: -1;
+            animation: fadeIn 1.5s ease 0.5s both;
+        }
+
+        @media (max-width: 768px) { .hero-hud { display: none; } }
+
+        /* ===== STATS BAR ===== */
+        .stats {
+            background: var(--bg-light);
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+            padding: 32px 0;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 24px;
+        }
+
+        .stat {
+            text-align: center;
+            animation: fadeInUp 0.6s ease both;
+        }
+
+        .stat-value {
+            font-family: var(--font-mono); font-size: 32px;
+            font-weight: 700; color: var(--accent);
+        }
+
+        .stat-label {
+            font-size: 12px; color: var(--text-dim);
+            text-transform: uppercase; letter-spacing: 0.1em;
+            margin-top: 4px;
+        }
+
+        /* ===== SECTION ===== */
+        section { padding: 100px 0; position: relative; }
+
+        .section-label {
+            font-family: var(--font-mono); font-size: 12px;
+            color: var(--accent); text-transform: uppercase;
+            letter-spacing: 0.15em; margin-bottom: 12px;
+        }
+
+        .section-title {
+            font-size: clamp(32px, 5vw, 48px);
+            font-weight: 700; color: var(--text-bright);
+            margin-bottom: 20px; letter-spacing: -0.02em;
+        }
+
+        .section-desc {
+            font-size: 18px; color: var(--text-dim);
+            max-width: 600px; margin-bottom: 60px;
+        }
+
+        /* ===== SINKS GRID ===== */
+        .sinks-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .sink-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 32px;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .sink-card::before {
+            content: '';
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+            transform: translateX(-100%);
+            transition: transform 0.6s;
+        }
+
+        .sink-card:hover::before { transform: translateX(100%); }
+        .sink-card:hover { border-color: var(--accent); transform: translateY(-4px); }
+
+        .sink-icon {
+            width: 48px; height: 48px;
+            background: var(--bg-light); border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 24px; margin-bottom: 20px;
+            border: 1px solid var(--border);
+        }
+
+        .sink-card h3 {
+            font-size: 20px; font-weight: 700;
+            margin-bottom: 8px; color: var(--text-bright);
+        }
+
+        .sink-card p {
+            font-size: 14px; color: var(--text-dim);
+            margin-bottom: 16px;
+        }
+
+        .sink-tag {
+            display: inline-block;
+            font-family: var(--font-mono); font-size: 11px;
+            background: var(--bg-light); color: var(--accent);
+            padding: 3px 10px; border-radius: 6px;
+            border: 1px solid var(--border);
+        }
+
+        /* ===== CODE BLOCK ===== */
+        .code-section {
+            background: var(--bg-light);
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .code-block {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+            font-family: var(--font-mono);
+            font-size: 14px;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .code-block .code-header {
+            display: flex; align-items: center; gap: 8px;
+            margin-bottom: 16px; padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .code-block .dot { width: 12px; height: 12px; border-radius: 50%; }
+        .code-block .dot.red { background: #FF5F57; }
+        .code-block .dot.yellow { background: #FEBC2E; }
+        .code-block .dot.green { background: #28C840; }
+
+        .code-block .filename {
+            color: var(--text-dim); font-size: 12px;
+            margin-left: auto;
+        }
+
+        .code-content { color: var(--text); line-height: 1.8; }
+        .code-content .comment { color: var(--text-dim); }
+        .code-content .keyword { color: var(--accent); }
+        .code-content .string { color: var(--green); }
+        .code-content .number { color: var(--amber); }
+
+        /* ===== COMPARISON ===== */
+        .comparison-table {
+            width: 100%; border-collapse: collapse;
+            margin-top: 32px;
+        }
+
+        .comparison-table th, .comparison-table td {
+            padding: 16px 20px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .comparison-table th {
+            font-size: 14px; font-weight: 700;
+            color: var(--text-dim); text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .comparison-table th.goose-col {
+            color: var(--accent);
+        }
+
+        .comparison-table td {
+            font-family: var(--font-mono); font-size: 14px;
+        }
+
+        .comparison-table td.goose-col {
+            color: var(--accent); font-weight: 700;
+        }
+
+        .comparison-table tr:hover { background: var(--bg-card); }
+
+        /* ===== FEATURES ===== */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+        }
+
+        .feature-item {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+            display: flex; gap: 16px;
+            transition: all 0.2s;
+        }
+
+        .feature-item:hover { border-color: var(--accent); }
+
+        .feature-icon {
+            flex-shrink: 0; width: 40px; height: 40px;
+            border-radius: 8px; background: var(--bg-light);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px; border: 1px solid var(--border);
+        }
+
+        .feature-item h4 {
+            font-size: 15px; font-weight: 700;
+            margin-bottom: 4px; color: var(--text-bright);
+        }
+
+        .feature-item p {
+            font-size: 13px; color: var(--text-dim);
+        }
+
+        /* ===== FOOTER ===== */
+        footer {
+            background: var(--bg-light);
+            border-top: 1px solid var(--border);
+            padding: 60px 0 32px;
+        }
+
+        .footer-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr;
+            gap: 40px;
+            margin-bottom: 40px;
+        }
+
+        @media (max-width: 768px) { .footer-grid { grid-template-columns: 1fr; } }
+
+        .footer-brand h3 {
+            font-size: 24px; font-weight: 800;
+            margin-bottom: 12px; color: var(--text-bright);
+        }
+
+        .footer-brand p {
+            font-size: 14px; color: var(--text-dim);
+            max-width: 400px;
+        }
+
+        .footer-col h4 {
+            font-size: 12px; font-weight: 700;
+            color: var(--accent); text-transform: uppercase;
+            letter-spacing: 0.1em; margin-bottom: 16px;
+        }
+
+        .footer-col a {
+            display: block; font-size: 14px;
+            color: var(--text-dim); text-decoration: none;
+            padding: 4px 0; transition: color 0.2s;
+        }
+
+        .footer-col a:hover { color: var(--accent); }
+
+        .footer-bottom {
+            border-top: 1px solid var(--border);
+            padding-top: 24px;
+            display: flex; justify-content: space-between;
+            align-items: center; flex-wrap: wrap; gap: 16px;
+        }
+
+        .footer-bottom p {
+            font-family: var(--font-mono); font-size: 12px;
+            color: var(--text-dim);
+        }
+
+        .footer-quote {
+            font-family: var(--font-mono); font-size: 13px;
+            color: var(--accent); font-style: italic;
+        }
+
+        /* ===== ANIMATIONS ===== */
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 0.5; }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        @keyframes radarSweep {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes blink {
+            0%, 49% { opacity: 1; }
+            50%, 100% { opacity: 0; }
+        }
+
+        .cursor-blink::after {
+            content: '_';
+            color: var(--accent);
+            animation: blink 1s infinite;
+        }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 768px) {
+            .nav-links { display: none; }
+            .hero { padding-top: 100px; }
+            .footer-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ===== NAVBAR ===== -->
+    <nav>
+        <div class="container">
+            <a href="/" class="logo">
+                <div class="logo-mark">G</div>
+                Goose
+            </a>
+            <div class="nav-links">
+                <a href="#sinks">Sinks</a>
+                <a href="#features">Features</a>
+                <a href="#quickstart">Quick Start</a>
+                <a href="https://goose-kafka.mintlify.site/" target="_blank">Docs</a>
+                <a href="https://github.com/Goose-Kafka/goose" target="_blank">GitHub</a>
+                <a href="#quickstart" class="nav-cta">Get Started</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ===== HERO ===== -->
+    <div class="hero">
+        <div class="hero-glow"></div>
+
+        <!-- Radar HUD -->
+        <svg class="hero-hud" viewBox="0 0 500 500">
+            <defs>
+                <radialGradient id="radarGrad">
+                    <stop offset="0%" stop-color="rgba(56,189,248,0.1)"/>
+                    <stop offset="100%" stop-color="transparent"/>
+                </radialGradient>
+            </defs>
+            <circle cx="250" cy="250" r="240" fill="url(#radarGrad)" stroke="rgba(56,189,248,0.15)" stroke-width="1"/>
+            <circle cx="250" cy="250" r="180" fill="none" stroke="rgba(56,189,248,0.1)" stroke-width="1"/>
+            <circle cx="250" cy="250" r="120" fill="none" stroke="rgba(56,189,248,0.08)" stroke-width="1"/>
+            <circle cx="250" cy="250" r="60" fill="none" stroke="rgba(56,189,248,0.05)" stroke-width="1"/>
+            <line x1="250" y1="10" x2="250" y2="490" stroke="rgba(56,189,248,0.06)"/>
+            <line x1="10" y1="250" x2="490" y2="250" stroke="rgba(56,189,248,0.06)"/>
+            <g style="transform-origin: 250px 250px; animation: radarSweep 4s linear infinite;">
+                <path d="M 250 250 L 250 10 A 240 240 0 0 1 490 250 Z" fill="rgba(56,189,248,0.04)"/>
+            </g>
+            <circle cx="320" cy="180" r="3" fill="var(--green)"/>
+            <circle cx="200" cy="320" r="3" fill="var(--green)"/>
+            <circle cx="370" cy="280" r="2" fill="var(--amber)"/>
+        </svg>
+
+        <div class="container">
+            <div class="hero-badge">
+                <span class="dot"></span>
+                v1.0.0 — Released
+            </div>
+            <h1>
+                Talk to me,<br>
+                <span class="accent-text">Goose.</span>
+            </h1>
+            <div class="hero-tagline">Lightweight Kafka-to-Sink Firehose</div>
+            <p>
+                A cloud-native Kafka consumer that delivers streaming data to HTTP, gRPC, MongoDB, PostgreSQL, and Redis — fast, reliable, and with full observability. 33MB binary. 30MB RAM. <1s startup.
+            </p>
+            <div class="hero-actions">
+                <a href="#quickstart" class="btn-primary">
+                    Quick Start →
+                </a>
+                <a href="https://github.com/Goose-Kafka/goose" target="_blank" class="btn-secondary">
+                    ⭐ Star on GitHub
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== STATS BAR ===== -->
+    <div class="stats">
+        <div class="container">
+            <div class="stats-grid">
+                <div class="stat" style="animation-delay: 0s">
+                    <div class="stat-value">33MB</div>
+                    <div class="stat-label">Binary Size</div>
+                </div>
+                <div class="stat" style="animation-delay: 0.1s">
+                    <div class="stat-value">30MB</div>
+                    <div class="stat-label">RAM at Idle</div>
+                </div>
+                <div class="stat" style="animation-delay: 0.2s">
+                    <div class="stat-value">&lt;1s</div>
+                    <div class="stat-label">Startup Time</div>
+                </div>
+                <div class="stat" style="animation-delay: 0.3s">
+                    <div class="stat-value">2,500+</div>
+                    <div class="stat-label">Msg/sec (single pod)</div>
+                </div>
+                <div class="stat" style="animation-delay: 0.4s">
+                    <div class="stat-value">9</div>
+                    <div class="stat-label">Dependencies</div>
+                </div>
+                <div class="stat" style="animation-delay: 0.5s">
+                    <div class="stat-value">5</div>
+                    <div class="stat-label">Sink Types</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== SINKS ===== -->
+    <section id="sinks">
+        <div class="container">
+            <div class="section-label">// SINKS</div>
+            <h2 class="section-title">Five sinks. One binary.</h2>
+            <p class="section-desc">Each Goose deployment targets one sink type. Pluggable via the Sink interface — add your own without touching the core.</p>
+
+            <div class="sinks-grid">
+                <div class="sink-card">
+                    <div class="sink-icon">🌐</div>
+                    <h3>HTTP REST</h3>
+                    <p>Individual, batch, and batch-with-response modes. Connection TTL prevents pod pinning. Configurable per-status-code error routing.</p>
+                    <span class="sink-tag">SINK_TYPE=http</span>
+                </div>
+                <div class="sink-card">
+                    <div class="sink-icon">⚡</div>
+                    <h3>gRPC</h3>
+                    <p>Raw protobuf passthrough — no Stencil or schema registry needed. gRPC error codes auto-classified as permanent or transient.</p>
+                    <span class="sink-tag">SINK_TYPE=grpc</span>
+                </div>
+                <div class="sink-card">
+                    <div class="sink-icon">🍃</div>
+                    <h3>MongoDB</h3>
+                    <p>Insert and upsert modes. Duplicate key errors (code 11000) auto-routed to DLQ. JSON fields become BSON documents.</p>
+                    <span class="sink-tag">SINK_TYPE=mongodb</span>
+                </div>
+                <div class="sink-card">
+                    <div class="sink-icon">🐘</div>
+                    <h3>PostgreSQL</h3>
+                    <p>INSERT and ON CONFLICT upsert. JSON fields auto-mapped to columns. Connection pooling with configurable max connections.</p>
+                    <span class="sink-tag">SINK_TYPE=postgresql</span>
+                </div>
+                <div class="sink-card">
+                    <div class="sink-icon">🔴</div>
+                    <h3>Redis</h3>
+                    <p>KeyValue, hashset, and list data types. Key templating from message fields. TTL support. Standalone and cluster deployment.</p>
+                    <span class="sink-tag">SINK_TYPE=redis</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== QUICK START ===== -->
+    <section id="quickstart" class="code-section">
+        <div class="container">
+            <div class="section-label">// QUICK START</div>
+            <h2 class="section-title">Running in under 2 minutes</h2>
+            <p class="section-desc">One Docker image. One Helm chart. All config via environment variables.</p>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;" class="quickstart-grid">
+                <div>
+                    <h4 style="color: var(--accent); font-family: var(--font-mono); font-size: 14px; margin-bottom: 12px;"># Docker</h4>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div>
+                            <span class="filename">terminal</span>
+                        </div>
+                        <div class="code-content">
+<span class="comment"># Pull the image</span>
+docker pull <span class="string">ghcr.io/goose-kafka/goose:latest</span>
+
+<span class="comment"># Run with 4 env vars</span>
+docker run \
+  -e <span class="keyword">SOURCE_KAFKA_BROKERS</span>=<span class="string">kafka:9092</span> \
+  -e <span class="keyword">SOURCE_KAFKA_TOPIC</span>=<span class="string">events</span> \
+  -e <span class="keyword">SOURCE_KAFKA_CONSUMER_GROUP_ID</span>=<span class="string">goose</span> \
+  -e <span class="keyword">SINK_HTTP_SERVICE_URL</span>=<span class="string">http://svc:8080/api</span> \
+  <span class="string">ghcr.io/goose-kafka/goose:latest</span>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <h4 style="color: var(--accent); font-family: var(--font-mono); font-size: 14px; margin-bottom: 12px;"># Kubernetes (Helm)</h4>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div>
+                            <span class="filename">terminal</span>
+                        </div>
+                        <div class="code-content">
+<span class="comment"># Clone the repo</span>
+git clone <span class="string">https://github.com/Goose-Kafka/goose</span>
+<span class="keyword">cd</span> goose
+
+<span class="comment"># Deploy to K8s</span>
+helm install goose ./helm \
+  --set env.<span class="keyword">SOURCE_KAFKA_BROKERS</span>=<span class="string">kafka:9092</span> \
+  --set env.<span class="keyword">SOURCE_KAFKA_TOPIC</span>=<span class="string">events</span> \
+  --set env.<span class="keyword">SINK_HTTP_SERVICE_URL</span>=<span class="string">http://svc:8080/api</span>
+
+<span class="comment"># Scale to 4 pods</span>
+helm upgrade goose ./helm \
+  --set replicaCount=<span class="number">4</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== FEATURES ===== -->
+    <section id="features">
+        <div class="container">
+            <div class="section-label">// FEATURES</div>
+            <h2 class="section-title">Built for production</h2>
+            <p class="section-desc">Everything you need to reliably consume Kafka and deliver to your downstream — nothing you don't.</p>
+
+            <div class="features-grid">
+                <div class="feature-item">
+                    <div class="feature-icon">🛡️</div>
+                    <div>
+                        <h4>At-Least-Once Delivery</h4>
+                        <p>Contiguity-gated offset commits. Network errors always retried. Zero message drops.</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">⚡</div>
+                    <div>
+                        <h4>Circuit Breaker</h4>
+                        <p>Sliding window. Opens on high failure rate. Probes and auto-recovers when sink is back.</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">🔄</div>
+                    <div>
+                        <h4>Retry → DLQ → Ignore</h4>
+                        <p>Config-driven error routing by HTTP status code. Transient errors retried, permanent → DLQ.</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">🔗</div>
+                    <div>
+                        <h4>Connection TTL</h4>
+                        <p>Connections closed after TTL and re-opened. Fixes pod pinning — redistributes traffic.</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">📐</div>
+                    <div>
+                        <h4>Proto→JSON Conversion</h4>
+                        <p>Via Stencil schema registry. Long-polling refresh — hot-swap descriptors without restart.</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">🔍</div>
+                    <div>
+                        <h4>CEL Filtering</h4>
+                        <p>JEXL-equivalent expressions. AND/OR, IN, has(), startsWith(), size(), nested fields.</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">✅</div>
+                    <div>
+                        <h4>Schema Validation</h4>
+                        <p>CEL-based validation before delivery. Invalid messages → DLQ. Catch bad data early.</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">📊</div>
+                    <div>
+                        <h4>15 Prometheus Metrics</h4>
+                        <p>Throughput, latency p50/p95/p99, errors, circuit breaker, consumer lag, HTTP status codes.</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">🎯</div>
+                    <div>
+                        <h4>OTel Tracing</h4>
+                        <p>firehose.consume + firehose.process_batch spans. Export to Jaeger or Tempo.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== COMPARISON ===== -->
+    <section class="code-section">
+        <div class="container">
+            <div class="section-label">// VS RAYSTACK</div>
+            <h2 class="section-title">Lighter. Faster. Fewer deps.</h2>
+            <p class="section-desc">Goose was built as a replacement for raystack/firehose — same architecture, rewritten in Go.</p>
+
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Metric</th>
+                        <th class="goose-col">Goose (Go)</th>
+                        <th>Raystack (Java)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Binary size</td>
+                        <td class="goose-col">~33 MB</td>
+                        <td>164 MB jar</td>
+                    </tr>
+                    <tr>
+                        <td>RAM at idle</td>
+                        <td class="goose-col">~30 MB</td>
+                        <td>~200–300 MB</td>
+                    </tr>
+                    <tr>
+                        <td>CPU at 2,500/s</td>
+                        <td class="goose-col">~0.6 vCPU</td>
+                        <td>~2–3 vCPU</td>
+                    </tr>
+                    <tr>
+                        <td>Startup time</td>
+                        <td class="goose-col">&lt;1s</td>
+                        <td>5–10s</td>
+                    </tr>
+                    <tr>
+                        <td>Dependencies</td>
+                        <td class="goose-col">9</td>
+                        <td>50+</td>
+                    </tr>
+                    <tr>
+                        <td>Docker image</td>
+                        <td class="goose-col">~33 MB (distroless)</td>
+                        <td>786 MB</td>
+                    </tr>
+                    <tr>
+                        <td>Connection pinning</td>
+                        <td class="goose-col">✅ Fixed (TTL)</td>
+                        <td>❌ Bug</td>
+                    </tr>
+                    <tr>
+                        <td>Circuit breaker</td>
+                        <td class="goose-col">✅ Built-in</td>
+                        <td>❌ None</td>
+                    </tr>
+                    <tr>
+                        <td>OTel tracing</td>
+                        <td class="goose-col">✅ Built-in</td>
+                        <td>❌ None</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- ===== CTA ===== -->
+    <section style="text-align: center; padding: 120px 0;">
+        <div class="container">
+            <div class="section-label">// READY TO FLY?</div>
+            <h2 class="section-title" style="font-size: clamp(32px, 6vw, 64px);">Talk to me, Goose.</h2>
+            <p style="color: var(--text-dim); font-size: 20px; max-width: 500px; margin: 20px auto 40px;">
+                One binary. Five sinks. Zero data drops.
+            </p>
+            <div class="hero-actions" style="justify-content: center;">
+                <a href="#quickstart" class="btn-primary">Get Started →</a>
+                <a href="https://goose-kafka.mintlify.site/" target="_blank" class="btn-secondary">Read the Docs</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== FOOTER ===== -->
+    <footer>
+        <div class="container">
+            <div class="footer-grid">
+                <div class="footer-brand">
+                    <h3>🪿 Goose</h3>
+                    <p>Lightweight Kafka-to-Sink Firehose. Built with Go. Inspired by Top Gun's Goose — the RIO who feeds critical data to Maverick, never misses a callout, and always has his pilot's back.</p>
+                </div>
+                <div class="footer-col">
+                    <h4>Resources</h4>
+                    <a href="https://goose-kafka.mintlify.site/">Documentation</a>
+                    <a href="https://github.com/Goose-Kafka/goose">GitHub</a>
+                    <a href="https://github.com/Goose-Kafka/goose/releases">Releases</a>
+                    <a href="https://github.com/Goose-Kafka/goose/blob/main/docs/future-tasks.md">Roadmap</a>
+                </div>
+                <div class="footer-col">
+                    <h4>Community</h4>
+                    <a href="https://github.com/Goose-Kafka/goose/issues">Issues</a>
+                    <a href="https://github.com/Goose-Kafka/goose/pulls">Pull Requests</a>
+                    <a href="https://github.com/orgs/Goose-Kafka/repositories">All Repos</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>Apache 2.0 License · Built as a replacement for raystack/firehose</p>
+                <p class="footer-quote">"Talk to me, Goose." — Maverick, 1986</p>
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>
