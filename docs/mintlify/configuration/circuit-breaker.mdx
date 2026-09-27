@@ -1,0 +1,26 @@
+---
+title: Circuit Breaker
+description: Circuit breaker configuration
+---
+
+# Circuit Breaker
+
+| Env Var | Default | Description |
+|---------|---------|-------------|
+| `SINK_HTTP_CIRCUIT_BREAKER_ENABLED` | `true` | Enable/disable |
+| `SINK_HTTP_CIRCUIT_BREAKER_FAILURE_THRESHOLD` | `80` | Failure rate % to open circuit (0–100) |
+| `SINK_HTTP_CIRCUIT_BREAKER_WINDOW_SIZE` | `100` | Sliding window size (last N requests) |
+| `SINK_HTTP_CIRCUIT_BREAKER_RESET_TIMEOUT_MS` | `10000` | Time to wait before probing (half-open) |
+
+## How It Works
+
+```
+Sliding window of last N requests:
+  ├── Failure rate < threshold → CLOSED (normal operation)
+  ├── Failure rate ≥ threshold → OPEN (stop sending, wait)
+  └── After RESET_TIMEOUT → HALF-OPEN (probe one request)
+       ├── Probe succeeds → CLOSED (resume normal)
+       └── Probe fails → OPEN (wait again)
+```
+
+When circuit is open, workers wait and periodically probe. The consumer keeps polling Kafka (no eviction) but doesn't waste workers on a dead sink.

@@ -1,0 +1,38 @@
+---
+title: gRPC Sink
+description: gRPC sink configuration
+---
+
+# gRPC Sink
+
+| Env Var | Default | Description |
+|---------|---------|-------------|
+| `SINK_TYPE` | `http` | Set to `grpc` |
+| `SINK_GRPC_SERVICE_URL` | _(required)_ | gRPC server address |
+| `SINK_GRPC_METHOD` | _(required)_ | gRPC method (e.g., `events.OrderService/ProcessOrder`) |
+| `SINK_GRPC_TIMEOUT_MS` | `10000` | gRPC call timeout |
+| `SINK_GRPC_TLS_ENABLED` | `false` | Enable TLS |
+| `SINK_GRPC_AUTH_TYPE` | `none` | `none` or `bearer` |
+| `SINK_GRPC_AUTH_TOKEN` | _(empty)_ | Bearer token |
+
+## How It Works
+
+gRPC uses protobuf natively. If Kafka has raw protobuf bytes, goose passes them directly to the gRPC call — no Stencil or schema registry needed.
+
+```
+Kafka: [08 41 12 05 ...]  (raw protobuf bytes)
+  → goose → gRPC call: OrderService/ProcessOrder(rawBytes)
+  → no conversion, no descriptor, no JSON
+```
+
+## Error Classification
+
+| gRPC Code | Classification | Action |
+|-----------|---------------|--------|
+| `INVALID_ARGUMENT` | Permanent | DLQ |
+| `NOT_FOUND` | Permanent | DLQ |
+| `ALREADY_EXISTS` | Permanent | DLQ |
+| `PERMISSION_DENIED` | Permanent | DLQ |
+| `UNAVAILABLE` | Transient | Retry |
+| `DEADLINE_EXCEEDED` | Transient | Retry |
+| `RESOURCE_EXHAUSTED` | Transient | Retry |

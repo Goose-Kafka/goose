@@ -1,0 +1,42 @@
+---
+title: Overview
+description: What is Goose and why use it
+---
+
+# Overview
+
+> _"Talk to me, Goose." — Maverick, Top Gun (1986)_
+
+Goose is a lightweight, cloud-native Kafka consumer that delivers streaming data to multiple sink types — HTTP REST, gRPC, MongoDB, PostgreSQL, and Redis.
+
+## What Goose Does
+
+Goose sits between Kafka and your downstream services. It consumes messages from Kafka topics and delivers them to configured endpoints with:
+
+- **At-least-once delivery** — offset commits with contiguity-gated logic
+- **Retry + DLQ** — failed messages retried, then dead-lettered if exhausted
+- **Circuit breaker** — pauses when downstream is down, resumes on recovery
+- **Schema conversion** — protobuf→JSON via Stencil schema registry
+- **Filtering** — JSONPath and CEL expressions
+- **Validation** — CEL-based message validation before delivery
+- **Observability** — 15 Prometheus metrics + OTel traces + Loki logs
+
+## Sink Types
+
+| Sink | Config | Use Case |
+|------|--------|----------|
+| HTTP REST | `SINK_TYPE=http` | Call REST APIs, webhooks, payment processors |
+| gRPC | `SINK_TYPE=grpc` | Internal microservices (raw protobuf passthrough) |
+| MongoDB | `SINK_TYPE=mongodb` | Store documents, payment records |
+| PostgreSQL | `SINK_TYPE=postgresql` | Relational data, audit trails |
+| Redis | `SINK_TYPE=redis` | Cache status, rate limiting, key-value |
+
+## Key Metrics
+
+| Metric | Value |
+|--------|-------|
+| Binary size | ~33MB |
+| RAM at idle | ~30MB |
+| Startup time | <1s |
+| Dependencies | 9 |
+| Max throughput | 2,500+ msg/s (single pod, 100ms latency) |

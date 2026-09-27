@@ -1,0 +1,41 @@
+---
+title: Observability
+description: Metrics, tracing, and logging configuration
+---
+
+# Observability
+
+| Env Var | Default | Description |
+|---------|---------|-------------|
+| `METRICS_PROMETHEUS_ENABLED` | `true` | Enable Prometheus `/metrics` |
+| `METRICS_PROMETHEUS_PORT` | `9090` | Metrics server port |
+| `OTEL_TRACING_ENABLED` | `false` | Enable OpenTelemetry traces |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | _(empty)_ | OTLP gRPC endpoint (Jaeger/Tempo) |
+| `OTEL_SERVICE_NAME` | `goose` | OTel service name |
+
+## Prometheus Metrics (15)
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `firehose_messages_consumed_total` | counter | Messages consumed from Kafka |
+| `firehose_messages_filtered_total` | counter | Messages dropped by filter |
+| `firehose_messages_delivered_total` | counter | Messages delivered to sink |
+| `firehose_messages_retried_total` | counter | Messages that entered retry |
+| `firehose_messages_dlq_total` | counter | Messages sent to DLQ |
+| `firehose_messages_ignored_total` | counter | Messages dropped (no DLQ) |
+| `firehose_messages_validation_failed_total` | counter | Messages that failed validation |
+| `firehose_sink_latency_seconds` | histogram | Sink call latency (p50/p95/p99) |
+| `firehose_consumer_lag_messages` | gauge | Kafka consumer lag |
+| `firehose_worker_pool_queue_depth` | gauge | Batch channel buffer depth |
+| `firehose_worker_pool_size` | gauge | Configured worker count |
+| `firehose_circuit_breaker_open` | gauge | Circuit breaker state (1=open, 0=closed) |
+| `firehose_http_response_code_total` | counter | HTTP response code distribution |
+| `firehose_offset_commit_total` | counter | Offset commits to Kafka |
+| `firehose_schema_updates_total` | counter | Schema registry updates |
+
+## OTel Spans
+
+| Span | Attributes |
+|------|-----------|
+| `firehose.consume` | kafka.topic, kafka.partition, kafka.offset, validation.passed, filter.passed |
+| `firehose.process_batch` | batch.id, batch.size, worker.id, http.delivered, http.failed, http.duration_ms |

@@ -1,0 +1,28 @@
+---
+title: MongoDB Sink
+description: MongoDB sink configuration
+---
+
+# MongoDB Sink
+
+| Env Var | Default | Description |
+|---------|---------|-------------|
+| `SINK_TYPE` | `http` | Set to `mongodb` |
+| `SINK_MONGO_CONNECTION_URL` | _(required)_ | MongoDB connection URL |
+| `SINK_MONGO_DATABASE` | _(required)_ | Database name |
+| `SINK_MONGO_COLLECTION` | _(required)_ | Collection name |
+| `SINK_MONGO_MODE` | `insert` | `insert` or `upsert` |
+| `SINK_MONGO_PRIMARY_KEY` | _(empty)_ | Primary key field for upsert |
+| `SINK_MONGO_AUTH_ENABLED` | `false` | Enable auth |
+| `SINK_MONGO_AUTH_USERNAME` | _(empty)_ | Auth username |
+| `SINK_MONGO_AUTH_PASSWORD` | _(empty)_ | Auth password |
+| `SINK_MONGO_AUTH_DB` | `admin` | Auth database |
+| `SINK_MONGO_CONNECT_TIMEOUT_MS` | `5000` | Connection timeout |
+
+## Error Classification
+
+| Error | Action |
+|-------|--------|
+| Duplicate key (code 11000) | DLQ (non-retryable) |
+| Connection error | Retry → DLQ if exhausted |
+| Invalid JSON | DLQ (non-retryable) |

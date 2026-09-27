@@ -1,0 +1,33 @@
+---
+title: Tracing
+description: OpenTelemetry tracing
+---
+
+# OpenTelemetry Tracing
+
+## Config
+
+```properties
+OTEL_TRACING_ENABLED=true
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+OTEL_SERVICE_NAME=goose
+```
+
+## Spans
+
+| Span | Where | Attributes |
+|------|-------|-----------|
+| `firehose.consume` | Consumer goroutine | kafka.topic, kafka.partition, kafka.offset, validation.passed, filter.passed |
+| `firehose.process_batch` | Worker goroutine | batch.id, batch.size, worker.id, http.delivered, http.failed, http.duration_ms |
+| `firehose.dispatch_batch` | Consumer → channel | batch.id, batch.size |
+
+## Trace Waterfall
+
+```
+firehose.consume (0.1ms)
+  └── firehose.dispatch_batch (0.01ms)
+      └── firehose.process_batch (45ms)
+            └── http call to sink (44.8ms)
+```
+
+Visible in Jaeger or Tempo when OTel is enabled.

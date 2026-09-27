@@ -1,0 +1,35 @@
+---
+title: Grafana Dashboards
+description: Pre-built Grafana dashboards
+---
+
+# Grafana Dashboards
+
+Goose ships with pre-built Grafana dashboards in the integration test repo.
+
+## Dashboards
+
+| Dashboard | Panels | Description |
+|-----------|--------|-------------|
+| Goose Firehose | 9 | Messages consumed/delivered (rate graphs), sink latency P50/P95/P99, HTTP response codes, circuit breaker, queue depth, retries, DLQ, Loki logs |
+| Mock HTTP Server | 5 | Request rate, duration P50/P95/P99, active requests, status codes, logs |
+| Kafka | 3 | Consumer lag, messages by partition, Kafka logs |
+
+## Setup
+
+Dashboards are auto-loaded via ConfigMap in the K8s manifests:
+
+```yaml
+# grafana-dashboards ConfigMap
+# Each dashboard JSON is a separate key
+goose-dashboard.json
+mock-http-dashboard.json
+kafka-dashboard.json
+```
+
+## Datasources
+
+| Datasource | URL | Purpose |
+|-----------|-----|---------|
+| Prometheus | `http://prometheus:9090` | Metrics (default) |
+| Loki | `http://loki:3100` | Logs |
