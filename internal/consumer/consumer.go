@@ -58,7 +58,6 @@ func New(cfg *config.Config, batchChan chan<- *worker.Batch, doneChan <-chan str
 		GroupID:  cfg.Kafka.ConsumerGroupID,
 		MaxBytes: 10e6,
 	})
-
 	schemaMgr, err := schema.NewSchemaManager(schema.Config{
 		InputSchemaDataType:      cfg.Schema.InputSchemaDataType,
 		SchemaRegistryEnabled:    cfg.Schema.SchemaRegistryEnabled,
@@ -157,29 +156,18 @@ func (c *Consumer) Run(ctx context.Context) error {
 		default:
 		}
 
-		// Batch-poll: fetch up to maxPollRecords messages in one poll cycle
-		var kafkaMsgs []kafka.Message
-		for i := 0; i < maxPollRecords; i++ {
-			msg, err := c.reader.FetchMessage(ctx)
-			if err != nil {
-				if ctx.Err() != nil && len(kafkaMsgs) > 0 {
-					// Context cancelled but we have messages — process them
-					break
-				}
-				if ctx.Err() != nil {
-					return nil
-				}
-				if len(kafkaMsgs) > 0 {
-					// We have some messages — process them, log the error
-					log.Printf("consumer: fetch error after %d messages: %v", len(kafkaMsgs), err)
-					break
-				}
-				// No messages yet — just a poll timeout, continue
-				log.Printf("consumer: read error: %v", err)
-				break
+		// Read one message at a time (ReadMessage is consumer-group aware, auto-commits offset)
+		// Batch-poll mode could be added in future as an optimization
+		msg, err := c.reader.ReadMessage(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil
 			}
-			kafkaMsgs = append(kafkaMsgs, msg)
+			log.Printf("consumer: read error: %v", err)
+			continue
 		}
+
+		var kafkaMsgs = []kafka.Message{msg}
 
 		if len(kafkaMsgs) == 0 {
 			continue
