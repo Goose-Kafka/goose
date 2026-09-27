@@ -34,11 +34,18 @@ metrics:
 
 resources:
   requests:
-    cpu: 100m
-    memory: 30Mi
+    cpu: 200m
+    memory: 64Mi
   limits:
     cpu: 500m
-    memory: 100Mi
+    memory: 128Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80  # optional, uncomment to enable
 
 nodeSelector: {}
 affinity: {}
