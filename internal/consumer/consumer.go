@@ -6,6 +6,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Goose-Kafka/goose/internal/config"
 	"github.com/Goose-Kafka/goose/internal/error"
@@ -136,10 +137,14 @@ func New(cfg *config.Config, batchChan chan<- *worker.Batch, doneChan <-chan str
 	}, nil
 }
 
-// Run is the consumer's main poll loop. It reads messages from Kafka in batches
-// (up to MAX_POLL_RECORDS per batch using FetchMessage), deserializes, validates,
-// filters, creates batches, and dispatches them to the worker pool.
-// The loop exits when the context is cancelled.
+// Run is the consumer's main poll loop. It reads messages from Kafka using
+// ReadMessage in a loop (up to MAX_POLL_RECORDS per cycle), deserializes,
+// validates, filters, splits into chunks of WORKER_POOL_SIZE, and dispatches
+// chunks to the worker pool channel.
+//
+// Chunk size = WORKER_POOL_SIZE. When POOL_SIZE=1, each batch has 1 message
+// (strict ordering). When POOL_SIZE=50 and POLL_RECORDS=500, 10 chunks of
+// 50 messages each are dispatched simultaneously.
 func (c *Consumer) Run(ctx context.Context) error {
 	defer c.reader.Close()
 	defer c.schemaMgr.Close()
@@ -149,6 +154,11 @@ func (c *Consumer) Run(ctx context.Context) error {
 		maxPollRecords = 100
 	}
 
+	chunkSize := c.cfg.HTTP.WorkerPoolSize
+	if chunkSize <= 0 {
+		chunkSize = 10
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -156,8 +166,10 @@ func (c *Consumer) Run(ctx context.Context) error {
 		default:
 		}
 
-		// Read one message at a time (ReadMessage is consumer-group aware, auto-commits offset)
-		// Batch-poll mode could be added in future as an optimization
+		// Read up to maxPollRecords messages using ReadMessage (consumer-group aware)
+		// First message: blocks until available (consumer group assignment takes time)
+		// Subsequent: quick 100ms timeout to batch remaining messages
+		var kafkaMsgs []kafka.Message
 		msg, err := c.reader.ReadMessage(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
@@ -166,17 +178,26 @@ func (c *Consumer) Run(ctx context.Context) error {
 			log.Printf("consumer: read error: %v", err)
 			continue
 		}
+		kafkaMsgs = append(kafkaMsgs, msg)
 
-		var kafkaMsgs = []kafka.Message{msg}
+		// Try to read more messages (batch-poll the rest)
+		for i := 1; i < maxPollRecords; i++ {
+			readCtx, readCancel := context.WithTimeout(ctx, 100*time.Millisecond)
+			msg, err := c.reader.ReadMessage(readCtx)
+			readCancel()
+			if err != nil {
+				break // no more messages available right now
+			}
+			kafkaMsgs = append(kafkaMsgs, msg)
+		}
 
 		if len(kafkaMsgs) == 0 {
 			continue
 		}
 
-		// Process each fetched message
+		// Process each message: schema parse → validate → filter
 		var passedMsgs []filter.Message
 		for _, msg := range kafkaMsgs {
-			// OTel span: firehose.consume
 			_, span := c.tracer.Start(ctx, "firehose.consume",
 				trace.WithAttributes(
 					attribute.String("kafka.topic", msg.Topic),
@@ -192,7 +213,6 @@ func (c *Consumer) Run(ctx context.Context) error {
 				continue
 			}
 
-			// Schema validation (if enabled)
 			if c.validator != nil {
 				valid, reason := c.validator.Validate(parsed)
 				if !valid {
@@ -211,19 +231,14 @@ func (c *Consumer) Run(ctx context.Context) error {
 			}
 
 			filterMsg := filter.Message{
-				Topic:     msg.Topic,
-				Partition: msg.Partition,
-				Offset:    msg.Offset,
-				Key:       msg.Key,
-				Value:     parsed,
+				Topic: msg.Topic, Partition: msg.Partition, Offset: msg.Offset,
+				Key: msg.Key, Value: parsed,
 			}
 
 			passed, dropped := c.filter.Apply([]filter.Message{filterMsg})
 
 			if len(dropped) > 0 {
-				if c.offsetMgr != nil {
-					c.offsetMgr.AddOffsetsAndSetCommittable(toOffsetMessages(dropped))
-				}
+				c.offsetMgr.AddOffsetsAndSetCommittable(toOffsetMessages(dropped))
 				if c.metrics != nil {
 					c.metrics.MessagesFiltered.WithLabelValues(msg.Topic).Add(float64(len(dropped)))
 				}
@@ -231,9 +246,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 			} else {
 				span.SetAttributes(attribute.Bool("filter.passed", true))
 			}
-
 			span.End()
-
 			passedMsgs = append(passedMsgs, passed...)
 		}
 
@@ -241,38 +254,45 @@ func (c *Consumer) Run(ctx context.Context) error {
 			continue
 		}
 
-		// Create a single batch with all passed messages from this poll cycle
-		batch := &worker.Batch{
-			ID:       uuid.NewString(),
-			Messages: toSinkMessages(passedMsgs),
-		}
-
-		if c.offsetMgr != nil {
-			c.offsetMgr.AddBatch(batch.ID, toOffsetMessages(passedMsgs))
-		}
-
+		// Update metrics
 		if c.metrics != nil {
 			for _, pm := range passedMsgs {
 				c.metrics.MessagesConsumed.WithLabelValues(pm.Topic, strconv.Itoa(pm.Partition)).Inc()
 			}
-			// Consumer lag from kafka-go reader stats
 			stats := c.reader.Stats()
 			c.metrics.ConsumerLag.WithLabelValues(kafkaMsgs[0].Topic, strconv.Itoa(kafkaMsgs[0].Partition)).Set(float64(stats.Lag))
 		}
 
-		// Set OTel attributes for the batch
-		_, batchSpan := c.tracer.Start(ctx, "firehose.dispatch_batch",
-			trace.WithAttributes(
-				attribute.String("batch.id", batch.ID),
-				attribute.Int("batch.size", len(batch.Messages)),
-			),
-		)
-		batchSpan.End()
+		// Split passed messages into chunks of chunkSize and dispatch each as a batch
+		for i := 0; i < len(passedMsgs); i += chunkSize {
+			end := i + chunkSize
+			if end > len(passedMsgs) {
+				end = len(passedMsgs)
+			}
 
-		select {
-		case c.batchChan <- batch:
-		case <-ctx.Done():
-			return nil
+			chunk := passedMsgs[i:end]
+			batch := &worker.Batch{
+				ID:       uuid.NewString(),
+				Messages: toSinkMessages(chunk),
+			}
+
+			if c.offsetMgr != nil {
+				c.offsetMgr.AddBatch(batch.ID, toOffsetMessages(chunk))
+			}
+
+			_, batchSpan := c.tracer.Start(ctx, "firehose.dispatch_batch",
+				trace.WithAttributes(
+					attribute.String("batch.id", batch.ID),
+					attribute.Int("batch.size", len(batch.Messages)),
+				),
+			)
+			batchSpan.End()
+
+			select {
+			case c.batchChan <- batch:
+			case <-ctx.Done():
+				return nil
+			}
 		}
 	}
 }
