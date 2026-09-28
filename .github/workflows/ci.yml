@@ -200,12 +200,16 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Install Syft
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+          syft version
+
       - name: Generate SBOM
-        uses: anchore/syft-action@v1
-        with:
-          image: goose:latest
-          format: spdx-json
-          output-file: sbom.spdx.json
+        run: |
+          syft goose:latest -o spdx-json --file sbom.spdx.json
+          echo "SBOM generated:"
+          ls -lh sbom.spdx.json
 
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@v4
