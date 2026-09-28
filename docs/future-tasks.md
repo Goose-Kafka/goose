@@ -1,7 +1,8 @@
 # Goose Future Tasks & Architecture Analysis
 
 **Created:** 2024-09-24
-**Status:** Planning — tasks to implement in future versions
+**Last Updated:** 2026-09-28
+**Status:** v1.0.0 released — batch-poll consumer load tested
 
 ---
 
@@ -113,7 +114,8 @@ SCHEMA_REGISTRY_REFRESH_INTERVAL_MS=300000      # for periodic (5 min)
 
 ## Task 3: gRPC Sink Support
 
-**Status:** 🔲 Not started
+**Status:** ✅ Complete
+**Completed:** 2026-09-25
 **Priority:** Medium — needed if downstream services are gRPC
 **Effort:** Medium-High
 
@@ -286,7 +288,8 @@ SCHEMA_VALIDATION_ON_FAILURE=dlq           # dlq | ignore | drop
 
 ## Task 6: Batch-Poll Consumer (Throughput Optimization)
 
-**Status:** 🔲 Not started
+**Status:** ✅ Complete
+**Completed:** 2026-09-28
 **Priority:** Medium — major throughput improvement
 **Effort:** Medium
 
@@ -386,7 +389,8 @@ OTEL_SERVICE_NAME=goose
 
 ## Task 8: Horizontal Pod Autoscaler (HPA) in Helm Chart
 
-**Status:** 🔲 Not started
+**Status:** ✅ Complete
+**Completed:** 2026-09-26
 **Priority:** Medium — production scaling
 **Effort:** Low
 
@@ -482,18 +486,18 @@ OAuth2 config exists but the token is likely fetched once and not refreshed. OAu
 
 ## Summary — Priority Order
 
-| # | Task | Priority | Effort | Depends On |
+| # | Task | Priority | Effort | Status |
 |---|---|---|---|---|
 | 1 | Proto→JSON conversion | High | Medium | ✅ Done |
 | 2 | Schema registry long-polling | High | Medium | ✅ Done |
-| 6 | Batch-poll consumer | Medium | Medium | — |
-| 3 | gRPC sink | Medium | Medium-High | — |
-| 8 | HPA in Helm chart | Medium | Low | — |
+| 6 | Batch-poll consumer | Medium | Medium | ✅ Done |
+| 3 | gRPC sink | Medium | Medium-High | ✅ Done |
+| 8 | HPA in Helm chart | Medium | Low | ✅ Done |
 | 7 | OTel spans | Low | Low | ✅ Done |
 | 9 | Consumer lag metrics | Low | Low | ✅ Done |
 | 5 | Schema validation | Low | Medium | ✅ Done |
-| 4 | Avro support | Low | High | — |
-| 10 | OAuth2 token refresh | Low | Low | — |
+| 4 | Avro support | Low | High | 🔲 Not started |
+| 10 | OAuth2 token refresh | Low | Low | 🔲 Not started |
 
 ## Completed Tasks
 
@@ -505,11 +509,21 @@ OAuth2 config exists but the token is likely fetched once and not refreshed. OAu
 | — | ActionFail crashes consumer | 2024-09-24 | log.Panicf instead of just logging |
 | — | Circuit breaker | 2024-09-24 | Sliding window with open/close/half-open states |
 | — | DLQ to Kafka | 2024-09-24 | KafkaDLQWriter with metadata headers |
-| — | Prometheus metrics (14) | 2024-09-24 | All defined, most wired |
+| — | Prometheus metrics (15) | 2024-09-24 | All defined and wired |
 | — | Connection TTL + idle eviction | 2024-09-24 | Fixes raystack's connection pinning bug |
 | — | JSON-path filter | 2024-09-24 | NoOpFilter + JSONPathFilter |
-| — | Helm chart | 2024-09-24 | Deployment, Service, ConfigMap |
-| — | Dockerfile (distroless, ~26MB) | 2024-09-24 | Multi-stage build |
-| — | E2E integration tests | 2024-09-24 | 4 tests: E2E, retry, DLQ, circuit breaker |
-| — | Load tested to 2,500/s | 2024-09-24 | 600K msgs, 100ms delay, 250 workers |
-| — | Breaking point identified | 2024-09-24 | Port exhaustion at ~8,300/s, fixed by pool=workers |
+| — | CEL filter | 2026-09-25 | cel-go engine with auto-detection |
+| — | CEL schema validation | 2026-09-25 | Semicolon-separated expressions |
+| — | Helm chart | 2024-09-24 | Deployment, Service, ConfigMap, HPA |
+| — | Dockerfile (distroless, ~33MB) | 2024-09-24 | Multi-stage build |
+| — | E2E integration tests (15) | 2024-09-24 | E2E, retry, DLQ, circuit breaker, CEL, proto |
+| — | Load tested to 2,500/s (single-poll) | 2026-07-13 | 600K msgs, 100ms delay, 250 workers |
+| — | Port exhaustion fix | 2026-07-13 | Auto-match connections to workers (25x improvement) |
+| — | Network error retry (zero drops) | 2026-07-13 | Status code 0 always retried |
+| — | Batch-poll consumer load test | 2026-09-28 | 6,017/s @0ms, ~4,000/s @50ms, 0 drops, 13-23 MiB |
+| — | Batch-with-response HTTP mode | 2026-09-25 | Per-message results from batch endpoint |
+| — | MongoDB sink | 2026-09-25 | Insert + upsert with duplicate key → DLQ |
+| — | PostgreSQL sink | 2026-09-25 | Auto column mapping, INSERT + ON CONFLICT upsert |
+| — | Redis sink | 2026-09-25 | Keyvalue, hashset, list with key templating |
+| — | Readiness/liveness probes | 2026-09-26 | Helm deployment with probes |
+| — | v1.0.0 release | 2026-09-26 | Docker image on GHCR, Helm chart release asset |

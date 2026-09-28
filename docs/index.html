@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Goose — Talk to Me, Goose</title>
-    <meta name="description" content="Lightweight Kafka-to-Sink Firehose. HTTP, gRPC, MongoDB, PostgreSQL, Redis. 33MB binary. 30MB RAM. <1s startup.">
+    <meta name="description" content="Lightweight Kafka-to-Sink Firehose. HTTP, gRPC, MongoDB, PostgreSQL, Redis. 33MB binary. 13–23 MB RAM. <1s startup.">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230A0E27'/%3E%3Ctext x='32' y='44' font-family='monospace' font-size='36' font-weight='700' fill='%2338BDF8' text-anchor='middle'%3EG%3C/text%3E%3C/svg%3E">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -581,7 +581,7 @@
             </h1>
             <div class="hero-tagline">Lightweight Kafka-to-Sink Firehose</div>
             <p>
-                A cloud-native Kafka consumer that delivers streaming data to HTTP, gRPC, MongoDB, PostgreSQL, and Redis — fast, reliable, and with full observability. 33MB binary. 30MB RAM. <1s startup.
+                A cloud-native Kafka consumer that delivers streaming data to HTTP, gRPC, MongoDB, PostgreSQL, and Redis — fast, reliable, and with full observability. 33MB binary. 13–23 MB RAM. <1s startup.
             </p>
             <div class="hero-actions">
                 <a href="#quickstart" class="btn-primary">
@@ -603,15 +603,15 @@
                     <div class="stat-label">Binary Size</div>
                 </div>
                 <div class="stat" style="animation-delay: 0.1s">
-                    <div class="stat-value">30MB</div>
-                    <div class="stat-label">RAM at Idle</div>
+                    <div class="stat-value">13–23MB</div>
+                    <div class="stat-label">RAM at Load</div>
                 </div>
                 <div class="stat" style="animation-delay: 0.2s">
                     <div class="stat-value">&lt;1s</div>
                     <div class="stat-label">Startup Time</div>
                 </div>
                 <div class="stat" style="animation-delay: 0.3s">
-                    <div class="stat-value">2,500+</div>
+                    <div class="stat-value">6,017</div>
                     <div class="stat-label">Msg/sec (single pod)</div>
                 </div>
                 <div class="stat" style="animation-delay: 0.4s">
@@ -685,7 +685,7 @@
                         </div>
                         <div class="code-content">
 <span class="comment"># Pull the image</span>
-docker pull <span class="string">ghcr.io/goose-kafka/goose:latest</span>
+docker pull <span class="string">ghcr.io/goose-kafka/goose:v1.0.0</span>
 
 <span class="comment"># Run with 4 env vars</span>
 docker run \
@@ -693,7 +693,7 @@ docker run \
   -e <span class="keyword">SOURCE_KAFKA_TOPIC</span>=<span class="string">events</span> \
   -e <span class="keyword">SOURCE_KAFKA_CONSUMER_GROUP_ID</span>=<span class="string">goose</span> \
   -e <span class="keyword">SINK_HTTP_SERVICE_URL</span>=<span class="string">http://svc:8080/api</span> \
-  <span class="string">ghcr.io/goose-kafka/goose:latest</span>
+  <span class="string">ghcr.io/goose-kafka/goose:v1.0.0</span>
                         </div>
                     </div>
                 </div>
@@ -796,7 +796,86 @@ helm upgrade goose ./helm \
                         <p>firehose.consume + firehose.process_batch spans. Export to Jaeger or Tempo.</p>
                     </div>
                 </div>
+                <div class="feature-item">
+                    <div class="feature-icon">📦</div>
+                    <div>
+                        <h4>Batch-Poll Consumer</h4>
+                        <p>Pulls batches in a single ReadMessage loop, then splits into chunks. Ordered mode (1 worker) or multi-worker mode (100 workers) for max throughput.</p>
+                    </div>
+                </div>
             </div>
+        </div>
+    </section>
+
+    <!-- ===== BENCHMARKS ===== -->
+    <section id="benchmarks" class="code-section">
+        <div class="container">
+            <div class="section-label">// BENCHMARKS</div>
+            <h2 class="section-title">Load-tested. Proven.</h2>
+            <p class="section-desc">Benchmarks on kind K8s (1 pod, 1 Kafka partition, 3 mock-http replicas) — September 2026.</p>
+
+            <div class="stats-grid" style="margin-bottom: 40px;">
+                <div class="stat" style="background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px;">
+                    <div class="stat-value">6,017</div>
+                    <div class="stat-label">msg/s @ 0ms delay</div>
+                </div>
+                <div class="stat" style="background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px;">
+                    <div class="stat-value">~4,000</div>
+                    <div class="stat-label">msg/s @ 50ms delay</div>
+                </div>
+                <div class="stat" style="background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px;">
+                    <div class="stat-value">~800</div>
+                    <div class="stat-label">msg/s ordered mode</div>
+                </div>
+                <div class="stat" style="background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px;">
+                    <div class="stat-value">0</div>
+                    <div class="stat-label">Message drops</div>
+                </div>
+                <div class="stat" style="background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px;">
+                    <div class="stat-value">13–23</div>
+                    <div class="stat-label">MiB memory</div>
+                </div>
+                <div class="stat" style="background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px;">
+                    <div class="stat-value">+60%</div>
+                    <div class="stat-label">vs previous baseline</div>
+                </div>
+            </div>
+
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Config</th>
+                        <th>Throughput</th>
+                        <th>Memory</th>
+                        <th>Drops</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>POOL=100, POLL=500, 0ms delay</td>
+                        <td class="goose-col">6,017 msg/s</td>
+                        <td>13 MiB</td>
+                        <td>0</td>
+                    </tr>
+                    <tr>
+                        <td>POOL=100, POLL=500, 50ms delay</td>
+                        <td class="goose-col">~4,000 msg/s</td>
+                        <td>23 MiB</td>
+                        <td>0</td>
+                    </tr>
+                    <tr>
+                        <td>POOL=1, POLL=1, 0ms delay (ordered)</td>
+                        <td class="goose-col">~800 msg/s</td>
+                        <td>21 MiB</td>
+                        <td>0</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <p style="color: var(--text-dim); font-size: 14px; margin-top: 20px; font-family: var(--font-mono);">
+                // Previous baseline (2026-07-13, single-poll): 2,500/s at 50ms, 30 MiB, 1,058 drops (port exhaustion).<br>
+                // Batch-poll improvements: +60% throughput, −23% to −57% memory, zero drops, 25× more connections.
+            </p>
         </div>
     </section>
 
@@ -822,14 +901,19 @@ helm upgrade goose ./helm \
                         <td>164 MB jar</td>
                     </tr>
                     <tr>
-                        <td>RAM at idle</td>
-                        <td class="goose-col">~30 MB</td>
+                        <td>RAM at load</td>
+                        <td class="goose-col">~13–23 MB</td>
                         <td>~200–300 MB</td>
                     </tr>
                     <tr>
                         <td>CPU at 2,500/s</td>
                         <td class="goose-col">~0.6 vCPU</td>
                         <td>~2–3 vCPU</td>
+                    </tr>
+                    <tr>
+                        <td>Peak throughput</td>
+                        <td class="goose-col">6,017 msg/s</td>
+                        <td>~2,500 msg/s</td>
                     </tr>
                     <tr>
                         <td>Startup time</td>

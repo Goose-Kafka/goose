@@ -86,9 +86,9 @@ OTEL_SERVICE_NAME=goose
 | `SOURCE_KAFKA_CONSUMER_GROUP_ID` | _(empty)_ | ✅ | Consumer group ID |
 | `SOURCE_KAFKA_CONSUMER_CONFIG_MAX_POLL_RECORDS` | `500` | | Max messages per poll |
 | `SOURCE_KAFKA_POLL_TIMEOUT_MS` | `1000` | | Poll blocking timeout |
-| `SOURCE_KAFKA_CONSUMER_CONFIG_MAX_POLL_INTERVAL_MS` | `300000` | | Max time between polls (5 min) |
-| `SOURCE_KAFKA_CONSUMER_CONFIG_SESSION_TIMEOUT_MS` | `10000` | | Heartbeat timeout |
-| `SOURCE_KAFKA_CONSUMER_CONFIG_AUTO_OFFSET_RESET` | `latest` | | `latest` or `earliest` |
+| `SOURCE_KAFKA_MAX_POLL_INTERVAL_MS` | `300000` | | Max time between polls (5 min) |
+| `SOURCE_KAFKA_SESSION_TIMEOUT_MS` | `10000` | | Heartbeat timeout |
+| `SOURCE_KAFKA_AUTO_OFFSET_RESET` | `latest` | | `latest` or `earliest` |
 | `SOURCE_KAFKA_COMMIT_INTERVAL_MS` | `5000` | | Offset commit interval |
 
 ### Worker Pool
@@ -164,6 +164,44 @@ OTEL_SERVICE_NAME=goose
 | `SCHEMA_REGISTRY_REFRESH_INTERVAL_MS` | `300000` | | Periodic refresh interval |
 | `SCHEMA_REGISTRY_FETCH_TIMEOUT_MS` | `10000` | | Fetch timeout |
 | `SCHEMA_REGISTRY_AUTH_BEARER_TOKEN` | _(empty)_ | | Bearer token |
+
+### Batch-Poll Consumer
+
+| Env Var | Default | Required | Description |
+|---|---|---|---|
+| `SOURCE_KAFKA_CONSUMER_CONFIG_MAX_POLL_RECORDS` | `500` | | Max messages per poll cycle |
+
+> Goose uses `ReadMessage` (not `FetchMessage`) with a 100ms timeout for subsequent reads within a poll cycle. `FetchMessage` with `GroupID` blocks forever in segmentio/kafka-go — this is a known quirk. Messages are split into chunks of `WORKER_POOL_SIZE` and dispatched as separate batches.
+
+**Ordered mode** (`POOL=1`, `POLL=1`): Strict per-message ordering, ~800 msg/s at 0ms delay. Use when messages are dependent (m10 needs m1 to succeed first).
+
+**Multi-worker mode** (`POOL>1`): Parallel processing within chunks, ~6,000 msg/s at 0ms delay, ~4,000 msg/s at 50ms delay. Use when messages are independent.
+
+### HTTP Batch Mode
+
+| Env Var | Default | Required | Description |
+|---|---|---|---|
+| `SINK_HTTP_BATCH_MODE` | `none` | | `none` (individual), `all_or_nothing`, `with_response` |
+| `SINK_HTTP_BATCH_MAX_SIZE` | `500` | | Max messages per batch POST |
+| `SINK_HTTP_BATCH_SEQ_FIELD` | `_goose_seq` | | Sequence field name |
+| `SINK_HTTP_BATCH_RESPONSE_PATH` | `results` | | JSON path to results array |
+| `SINK_HTTP_BATCH_RESPONSE_SEQ_FIELD` | `seq` | | Seq field in response |
+| `SINK_HTTP_BATCH_RESPONSE_STATUS_FIELD` | `status` | | Status field in response |
+| `SINK_HTTP_BATCH_RESPONSE_ERROR_FIELD` | `error` | | Error field in response |
+| `SINK_HTTP_BATCH_RESPONSE_RETRY_FLAG` | `is_retryable` | | Retryable flag field |
+| `SINK_HTTP_BATCH_RESPONSE_SUCCESS_VALUE` | `success` | | Value meaning success |
+
+### Sink Type Selection
+
+| `SINK_TYPE` | Sink | Key Env Vars |
+|---|---|---|
+| `http` (default) | HTTP REST | `SINK_HTTP_SERVICE_URL` |
+| `grpc` | gRPC | `SINK_GRPC_SERVICE_URL`, `SINK_GRPC_METHOD` |
+| `mongodb` | MongoDB | `SINK_MONGO_CONNECTION_URL`, `SINK_MONGO_DATABASE`, `SINK_MONGO_COLLECTION` |
+| `postgresql` | PostgreSQL | `SINK_SQL_CONNECTION_URL`, `SINK_SQL_TABLE_NAME` |
+| `redis` | Redis | `SINK_REDIS_ADDRESSES` |
+
+See Mintlify docs for full gRPC, MongoDB, PostgreSQL, and Redis configuration.
 
 ### Observability
 
