@@ -1,0 +1,60 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-goose
+  labels:
+    app: goose
+    app.kubernetes.io/name: goose
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  podSelector:
+    matchLabels:
+      app: goose
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow metrics scraping from Prometheus
+    - from: {{- toYaml .Values.networkPolicy.ingressFrom | nindent 6 }}
+      ports:
+        - protocol: TCP
+          port: 9090
+  egress:
+    # Allow DNS resolution
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow Kafka connections
+    {{- range .Values.networkPolicy.egressKafkaPorts }}
+    - to: []
+      ports:
+        - protocol: TCP
+          port: {{ . }}
+    {{- end }}
+    # Allow HTTP sink connections
+    {{- if .Values.networkPolicy.egressHTTP }}
+    - to: {{- toYaml .Values.networkPolicy.egressHTTP | nindent 6 }}
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 1080
+    {{- end }}
+    # Allow OTLP tracing exports
+    {{- if .Values.networkPolicy.egressOTLP }}
+    - to: {{- toYaml .Values.networkPolicy.egressOTLP | nindent 6 }}
+      ports:
+        - protocol: TCP
+          port: 4317
+        - protocol: TCP
+          port: 4318
+    {{- end }}
+{{- end }}
