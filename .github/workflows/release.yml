@@ -57,12 +57,16 @@ jobs:
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
 
+      - name: Install Syft
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+          syft version
+
       - name: Generate SBOM
-        uses: anchore/syft-action@v1
-        with:
-          image: ghcr.io/goose-kafka/goose:${{ steps.meta.outputs.version }}
-          format: spdx-json
-          output-file: goose-sbom.spdx.json
+        run: |
+          syft ghcr.io/goose-kafka/goose:${{ steps.meta.outputs.version }} -o spdx-json --file goose-sbom.spdx.json
+          echo "SBOM generated:"
+          ls -lh goose-sbom.spdx.json
 
       - name: Upload SBOM to release
         uses: softprops/action-gh-release@v2
