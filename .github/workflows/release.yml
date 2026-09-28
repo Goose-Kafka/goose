@@ -23,6 +23,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
@@ -55,6 +56,43 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
+
+      - name: Generate SBOM
+        uses: anchore/syft-action@v1
+        with:
+          image: ghcr.io/goose-kafka/goose:${{ steps.meta.outputs.version }}
+          format: spdx-json
+          output-file: goose-sbom.spdx.json
+
+      - name: Upload SBOM to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: goose-sbom.spdx.json
+
+      - name: Run Trivy container scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ghcr.io/goose-kafka/goose:${{ steps.meta.outputs.version }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          exit-code: 1
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+        if: always()
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign Docker image (keyless)
+        run: |
+          cosign sign --yes ghcr.io/goose-kafka/goose:${{ steps.meta.outputs.version }}
+          cosign sign --yes ghcr.io/goose-kafka/goose:latest
+        env:
+          COSIGN_EXPERIMENTAL: 1
 
   helm:
     name: Package & Release Helm Chart

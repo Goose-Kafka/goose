@@ -1,6 +1,6 @@
 image:
-  repository: registry.example.com/goose
-  tag: 1.0.0
+  repository: ghcr.io/goose-kafka/goose
+  tag: 1.1.0
   pullPolicy: IfNotPresent
 
 replicaCount: 1
@@ -40,12 +40,45 @@ resources:
     cpu: 500m
     memory: 128Mi
 
+# Security context — defaults match the distroless nonroot image (UID 65532)
+securityContext: {}
+
+# Network policy — restrict ingress/egress to only required services
+networkPolicy:
+  enabled: false
+  ingressFrom:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: prometheus
+  egressKafkaPorts:
+    - 9092
+    - 9093
+  # egressHTTP:   # add IPs/CIDRs for HTTP sink if needed
+  #   - ipBlock:
+  #       cidr: 10.0.0.0/8
+  # egressOTLP:   # add IPs/CIDRs for OTel collector if needed
+  #   - podSelector:
+  #       matchLabels:
+  #         app.kubernetes.io/name: otel-collector
+
+# PodDisruptionBudget — ensures minimum availability during node drains
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  # maxUnavailable: 1  # alternatively, use maxUnavailable instead of minAvailable
+
 autoscaling:
   enabled: false
   minReplicas: 2
   maxReplicas: 10
   targetCPUUtilizationPercentage: 80
   # targetMemoryUtilizationPercentage: 80  # optional, uncomment to enable
+
+# Optional: override the security context for the pod
+# podSecurityContext:
+#   fsGroup: 65532
+#   seccompProfile:
+#     type: RuntimeDefault
 
 nodeSelector: {}
 affinity: {}
