@@ -25,7 +25,7 @@ Goose does the same for your services: it sits behind them, feeds data from Kafk
 - **Validation:** CEL-based schema validation with DLQ on failure
 - **Error Handling:** Config-driven retry → DLQ → circuit breaker → network error retry (zero drops)
 - **Connection Management:** TTL + idle eviction + stale validation (fixes connection pinning)
-- **Batch-Poll Consumer:** Polls up to 500 messages per cycle for reduced Kafka overhead
+- **Batch-Poll Consumer:** Uses `ReadMessage` with chunk splitting — polls up to `MAX_POLL_RECORDS` messages per cycle, splits into worker-sized chunks. Strict ordering (~800/s) or multi-worker (~6,000/s) modes
 - **CI/CD:** GitHub Actions (lint, test, build, Docker, Helm, security scan)
 
 ## Goose vs Raystack Firehose
@@ -54,7 +54,7 @@ docker run -e SOURCE_KAFKA_BROKERS=kafka:9092 \
            -e SOURCE_KAFKA_CONSUMER_GROUP_ID=goose \
            -e SINK_HTTP_SERVICE_URL=http://service:8080/api \
            -e INPUT_SCHEMA_DATA_TYPE=json \
-           goose:latest
+           goose:v1.0.0
 ```
 
 ### Run with Kubernetes (Helm)
@@ -93,7 +93,10 @@ Kafka Topic
     ▼
 ┌───────────────────────────────────────────────────────────┐
 │  Consumer Goroutine (1)                                   │
-│  • Polls Kafka (up to MAX_POLL_RECORDS per poll)          │
+│  • ReadMessage loop — first read blocks indefinitely,     │
+│    subsequent reads use 100ms timeout (batch-poll)        │
+│  • Collects up to MAX_POLL_RECORDS messages per cycle     │
+│  • Splits batch into chunks of SINK_WORKER_POOL_SIZE      │
 │  • Schema deserialize (protobuf→JSON or JSON passthrough)  │
 │  • Apply filter (JSONPath or CEL expression)              │
 │  • Create Batch with UUID                                 │
@@ -127,6 +130,39 @@ Kafka Topic
 3. **Contiguity-gated offsets** — offset N is committed only when all messages up to N are processed (at-least-once delivery).
 4. **Connection TTL** — connections are closed after TTL and re-opened, redistributing traffic across backend pods (fixes raystack's connection pinning bug).
 5. **Auto-matched pool size** — `SINK_HTTP_MAX_CONNECTIONS` auto-matches `SINK_WORKER_POOL_SIZE` to prevent port exhaustion.
+6. **Batch-poll via `ReadMessage`** — the first `ReadMessage` blocks indefinitely waiting for data; subsequent reads in the same cycle use a 100ms timeout to drain the partition without retrying empty polls. This differs from the old `FetchMessage` approach (now removed) which required busy-spin or blocking with no batch semantics.
+
+### Batch-Poll Consumer
+
+The consumer uses `ReadMessage` (not `FetchMessage`) in a loop that fills an in-memory batch up to `SOURCE_KAFKA_CONSUMER_CONFIG_MAX_POLL_RECORDS` (default 500). The filled batch is then split into **worker-sized chunks** — each chunk is a `*Batch` pushed onto `batchChan` for the worker pool to process concurrently.
+
+**How it works:**
+1. First `ReadMessage` blocks until a message arrives (no busy-spin).
+2. Subsequent `ReadMessage` calls use a **100ms timeout** — the loop continues filling the batch until either `MAX_POLL_RECORDS` is reached or the 100ms timeout fires (partition drained).
+3. The batch is split into chunks of `SINK_WORKER_POOL_SIZE` (e.g., 500 messages / 100 workers = 5 chunks of 100).
+4. Each chunk is sent to `batchChan` → dispatched to N worker goroutines concurrently.
+5. Offset manager tracks per-chunk completion and commits offsets only when contiguous (at-least-once).
+
+**Ordered mode (`SINK_WORKER_POOL_SIZE=1`)**
+
+When the worker pool size is 1, all chunks are processed sequentially — strict per-partition ordering is preserved. Throughput is bounded by HTTP latency × message count, not by concurrency.
+
+| Config | Throughput | Memory | Use when |
+|---|---|---|---|
+| `POOL=1, POLL=1` | ~800 msg/s | ~21 MiB per chunk | Sink requires strict message ordering, or audit/compliance reasons |
+
+**Multi-worker mode (`SINK_WORKER_POOL_SIZE>1`)**
+
+Multiple worker goroutines process chunks concurrently. Ordering across chunks is not guaranteed, but each chunk's internal order is preserved within that worker.
+
+| Config | Throughput | Memory | Use when |
+|---|---|---|---|
+| `POOL=100, POLL=500, 0ms sink delay` | 6,017 msg/s | 13 MiB | Low-latency sink (in-memory/in-process) |
+| `POOL=100, POLL=500, 50ms sink delay` | ~4,000 msg/s | 23 MiB | Real-world HTTP sink with ~50ms response time |
+
+> **When to use which:** Start with multi-worker (`POOL=50–100`) for maximum throughput. Switch to ordered mode (`POOL=1`) only when the downstream sink requires strict per-partition message ordering or when regulatory/audit constraints mandate it. The throughput cost of ordering is roughly 7× (6,000/s → 800/s).
+
+> Full benchmark details: [docs/benchmarks/2026-09-28-batch-poll-load-test.md](docs/benchmarks/2026-09-28-batch-poll-load-test.md)
 
 ## Configuration
 
@@ -170,13 +206,79 @@ All configuration is via environment variables. Sane defaults are provided — o
 | `SINK_HTTP_DATA_FORMAT` | `json` | `json` or `protobuf` (sets Content-Type header) |
 | `SINK_HTTP_JSON_BODY_TEMPLATE` | _(empty)_ | If set → individual mode (one POST per message). If empty → batch mode (all messages in one POST) |
 
-### Batch Mode vs Individual Mode
+### Batch HTTP Modes
 
-| Mode | When | Behavior |
+Goose supports three batch modes for the HTTP sink, controlled by `SINK_HTTP_BATCH_MODE` and `SINK_HTTP_JSON_BODY_TEMPLATE`:
+
+| Mode | Config | Behavior |
 |---|---|---|
-| **Batch** | `SINK_HTTP_JSON_BODY_TEMPLATE` is empty | All messages in a batch are serialized into one JSON array and sent as a single POST |
-| **Individual** | `SINK_HTTP_JSON_BODY_TEMPLATE` is set | One HTTP POST per message (for endpoints that handle one message at a time) |
-| **Batch-with-response** | `SINK_HTTP_BATCH_MODE=with_response` | Batch POST with per-message results (endpoint returns status per message) |
+| **Individual** | `SINK_HTTP_JSON_BODY_TEMPLATE` is set, `BATCH_MODE=none` | One HTTP POST per message (for endpoints that handle one message at a time) |
+| **All-or-nothing** | `SINK_HTTP_BATCH_MODE=all_or_nothing` | All messages in a chunk are serialized into one JSON array and sent as a single POST. If the endpoint returns non-2xx, the entire chunk is retried or sent to DLQ — no partial success. |
+| **Batch-with-response** | `SINK_HTTP_BATCH_MODE=with_response` | Batch POST with per-message results. The endpoint returns a JSON array with status per message; goose commits/ retries/ DLQs each message individually based on the response. |
+
+#### Individual mode
+
+Goose sends one HTTP POST per message, using `SINK_HTTP_JSON_BODY_TEMPLATE` to wrap the message:
+
+**Request:**
+```http
+POST /api/events
+Content-Type: application/json
+
+{"event_id": 12345, "payload": {"status": "created"}}
+```
+
+**Response:** `200 OK` → offset committed. `500` → retry. `404` → DLQ.
+
+#### All-or-nothing mode
+
+All messages in a chunk are sent as a single JSON array. The endpoint processes the whole batch and returns a single status code:
+
+**Request:**
+```http
+POST /api/events/batch
+Content-Type: application/json
+
+[
+  {"_goose_seq": 0, "event_id": 12345, "status": "created"},
+  {"_goose_seq": 1, "event_id": 12346, "status": "created"},
+  {"_goose_seq": 2, "event_id": 12347, "status": "created"}
+]
+```
+
+**Response:** `200 OK` → all offsets committed. `500` → entire chunk retried. `400` → entire chunk to DLQ.
+
+#### Batch-with-response mode
+
+The endpoint returns a JSON object with a `results` array (path configurable via `SINK_HTTP_BATCH_RESPONSE_PATH`). Each result entry has a sequence number, status, and optional error/retryable flag. Goose maps each entry back to the original message by `_goose_seq` and processes them individually:
+
+**Request:**
+```http
+POST /api/events/batch
+Content-Type: application/json
+
+[
+  {"_goose_seq": 0, "event_id": 12345, "status": "created"},
+  {"_goose_seq": 1, "event_id": 12346, "status": "created"},
+  {"_goose_seq": 2, "event_id": 12347, "status": "created"}
+]
+```
+
+**Response:**
+```json
+{
+  "results": [
+    {"seq": 0, "status": "success"},
+    {"seq": 1, "status": "failed", "error": "duplicate event_id", "is_retryable": false},
+    {"seq": 2, "status": "failed", "error": "db timeout", "is_retryable": true}
+  ]
+}
+```
+
+**Result handling per message:**
+- `seq 0` (`status=success`) → offset committed
+- `seq 1` (`status=failed`, `is_retryable=false`) → sent to DLQ (non-retryable)
+- `seq 2` (`status=failed`, `is_retryable=true`) → retried with exponential backoff; if retries exhausted → DLQ
 
 ### HTTP Batch-with-Response Mode
 
@@ -442,6 +544,36 @@ Schema update (zero downtime):
 | `SINK_HTTP_OAUTH2_CLIENT_SECRET` | _(empty)_ | Client secret |
 | `SINK_HTTP_OAUTH2_SCOPE` | _(empty)_ | Space-delimited OAuth2 scopes |
 
+## Performance & Benchmarks
+
+### Batch-Poll Load Test (2026-09-28)
+
+Benchmarked on kind Kubernetes (1 pod, 1 Kafka partition, 3 mock-http replicas). Full details: [docs/benchmarks/2026-09-28-batch-poll-load-test.md](docs/benchmarks/2026-09-28-batch-poll-load-test.md)
+
+| Config | Throughput | Memory | Drops | Ordering |
+|---|---|---|---|---|
+| `POOL=1, POLL=1, 0ms delay` (ordered) | ~800 msg/s | 21 MiB | 0 | ✅ Strict per-partition |
+| `POOL=100, POLL=500, 0ms delay` | 6,017 msg/s | 13 MiB | 0 | ❌ Multi-worker |
+| `POOL=100, POLL=500, 50ms delay` | ~4,000 msg/s | 23 MiB | 0 | ❌ Multi-worker |
+
+### Comparison with previous baseline (2026-07-13)
+
+The previous baseline used single-poll (one message per `FetchMessage` call) with no batch-poll chunk splitting:
+
+| Metric | Previous (2026-07-13) | Current (2026-09-28) | Change |
+|---|---|---|---|
+| Throughput at 50ms sink delay | 2,500 msg/s | ~4,000 msg/s | **+60%** |
+| Memory at 50ms sink delay | 30 MiB | 23 MiB | **-23%** |
+| Memory at 0ms sink delay | — | 13 MiB | **-57%** vs 30 MiB baseline |
+| Drops | 1,058 (port exhaustion) | 0 | **eliminated** |
+
+### Key takeaways
+
+- **Batch-poll with `ReadMessage`** eliminates port exhaustion by reducing per-message connection churn. The previous baseline's 1,058 drops were caused by port exhaustion from one-connection-per-message; batch-poll + chunk splitting reduced connections by ~100×.
+- **Multi-worker mode** (`POOL=100`) delivers 6,000+ msg/s with 0ms sink latency and ~4,000 msg/s with 50ms sink latency — a 60% improvement over the previous single-poll baseline.
+- **Ordered mode** (`POOL=1`) trades throughput for guarantee: ~800 msg/s with strict per-partition ordering, suitable for audit/compliance use cases.
+- **Memory footprint** dropped 23–57% due to chunk-sized batches instead of full-poll batches held in memory.
+
 ## Scaling Guide
 
 ### Formula
@@ -452,8 +584,9 @@ Max concurrent HTTP requests = goose_pods × workers_per_pod
 
 Max throughput = concurrent_requests × (1000 / HTTP_latency_ms)
 
-Example:
-  4 pods × 50 workers × (1000 / 100ms) = 2,000 msg/s
+Example (benchmarked):
+  1 pod × 100 workers × (1000 / 50ms) ≈ 2,000 msg/s theoretical
+  Actual benchmarked: ~4,000 msg/s (batch-poll amortizes per-message overhead)
 ```
 
 ### Production defaults
