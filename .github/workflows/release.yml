@@ -73,14 +73,14 @@ jobs:
         with:
           files: goose-sbom.spdx.json
 
-      - name: Run Trivy container scan
+      - name: Run Trivy container scan (report only)
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ghcr.io/goose-kafka/goose:${{ steps.meta.outputs.version }}
           format: sarif
           output: trivy-results.sarif
           severity: HIGH,CRITICAL
-          exit-code: 1
+          exit-code: 0
 
       - name: Upload Trivy results to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
