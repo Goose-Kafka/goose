@@ -6,27 +6,35 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
     labels:
       - dependencies
       - go
     commit-message:
       prefix: "deps(go)"
       include: scope
+    groups:
+      go-deps:
+        patterns:
+          - "*"
 
-  # GitHub Actions dependencies
+  # GitHub Actions dependencies — group all into one PR
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 1
     labels:
       - dependencies
       - github-actions
     commit-message:
       prefix: "deps(ci)"
       include: scope
+    groups:
+      actions:
+        patterns:
+          - "*"
 
   # Docker base image
   - package-ecosystem: docker
@@ -34,7 +42,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     labels:
       - dependencies
       - docker
