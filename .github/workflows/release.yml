@@ -21,9 +21,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     permissions:
-      contents: read
+      contents: write
       packages: write
       id-token: write
+      security-events: write
     steps:
       - uses: actions/checkout@v4
 
@@ -72,6 +73,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: goose-sbom.spdx.json
+        if: always()
 
       - name: Run Trivy container scan (report only)
         uses: aquasecurity/trivy-action@master
@@ -81,15 +83,17 @@ jobs:
           output: trivy-results.sarif
           severity: HIGH,CRITICAL
           exit-code: 0
+        if: always()
 
       - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-results.sarif
         if: always()
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
+        if: always()
 
       - name: Sign Docker image (keyless)
         run: |
