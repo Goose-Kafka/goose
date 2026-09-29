@@ -70,7 +70,7 @@ jobs:
           ls -lh goose-sbom.spdx.json
 
       - name: Upload SBOM to release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: goose-sbom.spdx.json
         if: always()
@@ -121,7 +121,7 @@ jobs:
           echo "Packaged: $CHART_NAME"
 
       - name: Upload Helm chart to release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: ./helm-package/*.tgz
           generate_release_notes: true
